@@ -31,7 +31,7 @@ We built a grid-based Tower Defence (TD) environment inspired by the tactical te
 Our AI agents must:
 
 - **Predict enemy movement** (like Bran watching from the Weirwood),
-- **Allocate scarce resources** (as Daenerys and Jon failed to do 😬),
+- **Allocate scarce resources** (as Daenerys and Jon failed to do),
 - **And optimize defender strategy** better than any panicked human commander.
 
 To accomplish this, we implemented and compared:
@@ -48,5 +48,5 @@ To accomplish this, we implemented and compared:
 
 ### 🧙 Hybrid Approaches
 
-- **A*-guided policy pretraining**
-- **A* as a "tactical advisor" blended with learned behavior** (AKA the Tyrion strategy)
+- **A*** guided policy pretraining**
+- **A*** as a "tactical advisor" blended with learned behavior** (AKA the Tyrion strategy)
