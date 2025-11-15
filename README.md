@@ -48,5 +48,5 @@ To accomplish this, we implemented and compared:
 
 ### 🧙 Hybrid Approaches
 
-- **A*** guided policy pretraining**
-- **A*** as a "tactical advisor" blended with learned behavior** (AKA the Tyrion strategy)
+- **A*** guided policy pretraining
+- **A*** as a "tactical advisor" blended with learned behavior (AKA the Tyrion strategy)
