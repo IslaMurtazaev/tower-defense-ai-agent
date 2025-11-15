@@ -76,7 +76,7 @@ SPAWN_ELITE_SCALE = 0.0004
 NUM_PATHS = 24  # every 15 degrees
 
 # Auto-deploy behavior (spawn when enemies approach)
-AUTO_DEPLOY_RANGE = 350.0
+AUTO_DEPLOY_RANGE = 500.0
 AUTO_DEPLOY_COOLDOWN = 2.5   # seconds between auto deploys
 
 # Wall troops limit
