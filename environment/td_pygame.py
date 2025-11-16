@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-td_winterfell_v7_1.py
-Winterfell Defense v7.1 — same as v7 but with base.wav as the looping background ambience
-(intended to be calm northern/wind atmosphere). Missing SFX are handled gracefully.
+td_pygame.py
+Winterfell Defense
 
 Controls:
 - Left click: place a soldier (random type)
