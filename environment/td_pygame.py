@@ -64,6 +64,7 @@ SOLDIER_SPEED = 160.0
 SOLDIER_MAX = 32
 SOLDIER_ATTACK_RANGE = 30  # contact range
 SOLDIER_BURN_DURATION = 0.1  # seconds (instant burn animation)
+SOLDIER_VISION_RADIUS = 200.0  # limited vision range
 
 # Heroes
 JON_RADIUS = 18
@@ -313,18 +314,20 @@ class DeadSoldier:
 class Soldier:
     def __init__(self, pos, spawn_angle=None):
         self.x, self.y = pos
+        self.original_x, self.original_y = pos  # Store original placement position
         self.phase = random.uniform(0,2*math.pi)
         self.color = SOLDIER_COLOR
         self.spawn_angle = spawn_angle if spawn_angle is not None else random.uniform(0,2*math.pi)
         self.speed = SOLDIER_SPEED
         self.cooldown = 0.0
-        # Note: per final decision, soldiers have no retreat state; they always attack nearest enemy.
-        # They do not "learn" the NK is invincible.
+        # Note: Soldiers have limited vision and return to original position when no enemies in range.
     def find_nearest_enemy(self, enemies):
+        # Only consider enemies within vision radius
         alive = [e for e in enemies if e.alive and e.spawn_delay <= 0]
-        if not alive: return None
-        alive.sort(key=lambda e: dist((self.x,self.y), e.pos()))
-        return alive[0]
+        in_vision = [e for e in alive if dist((self.x, self.y), e.pos()) <= SOLDIER_VISION_RADIUS]
+        if not in_vision: return None
+        in_vision.sort(key=lambda e: dist((self.x,self.y), e.pos()))
+        return in_vision[0]
     def move_toward(self, tx, ty, dt, factor=1.0):
         dx = tx - self.x; dy = ty - self.y
         d = math.hypot(dx,dy)
@@ -333,16 +336,15 @@ class Soldier:
             self.x += nx * self.speed * dt * factor
             self.y += ny * self.speed * dt * factor
     def step(self, dt, enemies, burns, sound_engine, stats):
-        # Always look for nearest enemy (wight or NK)
+        # Look for nearest enemy within vision radius
         if self.cooldown > 0:
             self.cooldown -= dt
         target = self.find_nearest_enemy(enemies)
         if target is None:
-            # wander slightly around base rim
-            rim_x = BASE_POS[0] + math.cos(self.spawn_angle) * (BASE_RADIUS + 72)
-            rim_y = BASE_POS[1] + math.sin(self.spawn_angle) * (BASE_RADIUS + 72)
-            # gentle approach to rim
-            self.move_toward(rim_x + math.sin(self.phase)*8, rim_y + math.cos(self.phase)*8, dt, factor=0.7)
+            # No enemies in vision - return to original placement position
+            d_to_origin = dist((self.x, self.y), (self.original_x, self.original_y))
+            if d_to_origin > 5:  # Only move if not already at original position
+                self.move_toward(self.original_x, self.original_y, dt, factor=0.5)
             return (False, None, None, None)
         tx, ty = target.pos()
         d = dist((self.x,self.y), (tx,ty))
