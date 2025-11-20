@@ -44,11 +44,11 @@ class TowerDefenseEnv(gym.Env):
     # Grid size for observation
     GRID_SIZE = 32
     
-    def __init__(self, render_mode: Optional[str] = None, max_steps: int = 1000):
+    def __init__(self, render_mode: Optional[str] = None, fast_mode: bool = True):
         super().__init__()
         
         self.render_mode = render_mode
-        self.max_combat_steps = max_steps
+        self.fast_mode = fast_mode  # Run simulation faster
         
         # Create game instance
         self.game = TowerDefenseGame()
@@ -76,7 +76,6 @@ class TowerDefenseEnv(gym.Env):
         
         # Episode tracking
         self.placement_actions_taken = 0
-        self.combat_steps = 0
         self.episode_reward = 0.0
         
         # Reward tracking
@@ -101,7 +100,6 @@ class TowerDefenseEnv(gym.Env):
         
         # Reset tracking
         self.placement_actions_taken = 0
-        self.combat_steps = 0
         self.episode_reward = 0.0
         self.last_wights_killed = 0
         self.last_soldiers_killed = 0
@@ -149,18 +147,22 @@ class TowerDefenseEnv(gym.Env):
         
         # Combat phase - auto-run the game
         if self.game.phase == GamePhase.COMBAT:
-            # Run combat for a time step
-            dt = 1.0 / 60.0  # 60 FPS simulation
-            self.game.update(dt)
-            self.combat_steps += 1
+            # Run combat faster in fast mode
+            if self.fast_mode:
+                # Run multiple updates per step for faster training
+                updates_per_step = 5  # Simulate 5 frames at once
+                dt = 1.0 / 60.0
+                for _ in range(updates_per_step):
+                    self.game.update(dt)
+                    if self.game.is_game_over():
+                        break
+            else:
+                # Normal speed for visualization
+                dt = 1.0 / 60.0
+                self.game.update(dt)
             
             # Calculate rewards based on state changes
             reward += self._calculate_step_reward()
-            
-            # Check if combat is too long
-            if self.combat_steps >= self.max_combat_steps:
-                truncated = True
-                reward -= 100  # Penalty for taking too long
         
         # Check if game is over
         if self.game.is_game_over():
@@ -294,8 +296,7 @@ class TowerDefenseEnv(gym.Env):
             'current_wave': state['current_wave'],
             'stats': state['stats'],
             'episode_reward': self.episode_reward,
-            'placement_actions_taken': self.placement_actions_taken,
-            'combat_steps': self.combat_steps
+            'placement_actions_taken': self.placement_actions_taken
         }
     
     def render(self):

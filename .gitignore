@@ -37,3 +37,8 @@ env/
 .DS_Store
 Thumbs.db
 
+# RL Training Artifacts
+trained_models/
+*.zip
+*.npz
+

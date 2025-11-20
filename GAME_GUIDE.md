@@ -44,8 +44,10 @@ Defend Winterfell castle against waves of wights (undead enemies) by strategical
 - **Speed**: 30 pixels/second
 - **Damage**: 20 to castle
 - **Behavior**: Move directly toward castle
-- **Waves**: 25, 40, 60, 75, 100 wights per wave (continuous, no delay between waves)
-- **Spawn Rate**: 0.3 seconds between spawns (fast!)
+- **Waves**: 25, 40, 60, 75, 100 wights per wave (300 total)
+- **Spawn Rate**: 0.3 seconds between spawns (~3 per second)
+- **Difficulty**: High - each soldier must eliminate ~30 wights
+- **No delays**: Continuous waves for intense pressure
 
 ## Soldier AI System
 
