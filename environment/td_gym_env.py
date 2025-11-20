@@ -87,6 +87,8 @@ class TowerDefenseEnv(gym.Env):
         self.pygame_initialized = False
         self.screen = None
         self.clock = None
+        self.font_small = None
+        self.font_medium = None
     
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None) -> Tuple[Dict, Dict]:
         """Reset the environment"""
@@ -310,37 +312,169 @@ class TowerDefenseEnv(gym.Env):
             return self._render_human()
     
     def _render_rgb_array(self) -> np.ndarray:
-        """Render as RGB array"""
-        # Initialize pygame if needed
-        if not self.pygame_initialized:
-            import pygame
-            pygame.init()
-            self.screen = pygame.Surface((TowerDefenseGame.WIDTH, TowerDefenseGame.HEIGHT))
-            self.pygame_initialized = True
-        
-        # Simple rendering
+        """Render as RGB array with full game details"""
         import pygame
         
-        # Clear
-        self.screen.fill((20, 20, 30))
+        # Initialize pygame if needed (for rgb_array mode)
+        if not self.pygame_initialized:
+            pygame.init()
+            self.screen = pygame.Surface((TowerDefenseGame.WIDTH, TowerDefenseGame.HEIGHT))
+            self.font_small = pygame.font.Font(None, 24)
+            self.font_medium = pygame.font.Font(None, 32)
+            self.pygame_initialized = True
         
-        # Draw castle
+        # Colors
+        COLOR_BG = (20, 20, 30)
+        COLOR_CASTLE = (100, 100, 120)
+        COLOR_FOOTMAN = (50, 100, 200)
+        COLOR_ARCHER = (50, 200, 100)
+        COLOR_WIGHT = (200, 50, 50)
+        COLOR_TEXT = (255, 255, 255)
+        COLOR_HP_BAR_BG = (60, 60, 60)
+        COLOR_HP_BAR = (0, 200, 0)
+        COLOR_HP_BAR_LOW = (255, 165, 0)
+        COLOR_HP_BAR_CRITICAL = (255, 50, 50)
+        
+        # Clear screen
+        self.screen.fill(COLOR_BG)
+        
+        # Draw castle with HP
         castle_pos = self.game.castle.position
-        pygame.draw.rect(self.screen, (100, 100, 120),
-                        (castle_pos.x - 60, castle_pos.y - 40, 120, 80))
+        castle_width, castle_height = 120, 80
         
-        # Draw soldiers
+        # Castle structure
+        castle_rect = pygame.Rect(
+            castle_pos.x - castle_width // 2,
+            castle_pos.y - castle_height // 2,
+            castle_width, castle_height
+        )
+        pygame.draw.rect(self.screen, COLOR_CASTLE, castle_rect)
+        pygame.draw.rect(self.screen, COLOR_TEXT, castle_rect, 2)
+        
+        # Castle towers
+        tower_size = 20
+        pygame.draw.rect(self.screen, COLOR_CASTLE,
+                        (castle_pos.x - castle_width // 2 - 10, 
+                         castle_pos.y - castle_height // 2 - 10,
+                         tower_size, tower_size + 10))
+        pygame.draw.rect(self.screen, COLOR_CASTLE,
+                        (castle_pos.x + castle_width // 2 - 10,
+                         castle_pos.y - castle_height // 2 - 10,
+                         tower_size, tower_size + 10))
+        
+        # Castle HP bar
+        hp_bar_width = castle_width
+        hp_bar_height = 10
+        hp_bar_x = castle_pos.x - hp_bar_width // 2
+        hp_bar_y = castle_pos.y + castle_height // 2 + 10
+        
+        pygame.draw.rect(self.screen, COLOR_HP_BAR_BG,
+                        (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
+        
+        hp_ratio = self.game.castle.hp / self.game.castle.max_hp
+        # Color based on HP
+        if hp_ratio > 0.6:
+            hp_color = COLOR_HP_BAR
+        elif hp_ratio > 0.3:
+            hp_color = COLOR_HP_BAR_LOW
+        else:
+            hp_color = COLOR_HP_BAR_CRITICAL
+            
+        pygame.draw.rect(self.screen, hp_color,
+                        (hp_bar_x, hp_bar_y, int(hp_bar_width * hp_ratio), hp_bar_height))
+        
+        # Castle HP text
+        hp_text = self.font_small.render(
+            f"Castle: {self.game.castle.hp}/{self.game.castle.max_hp} HP",
+            True, COLOR_TEXT
+        )
+        self.screen.blit(hp_text, (hp_bar_x, hp_bar_y + hp_bar_height + 3))
+        
+        # Draw soldiers with type distinction
         for soldier in self.game.soldiers:
             if soldier.alive:
-                color = (50, 100, 200) if soldier.type == SoldierType.FOOTMAN else (50, 200, 100)
-                pygame.draw.circle(self.screen, color,
-                                 (int(soldier.position.x), int(soldier.position.y)), 10)
+                pos = soldier.position
+                
+                if soldier.type == SoldierType.FOOTMAN:
+                    # Footman: Blue circle
+                    pygame.draw.circle(self.screen, COLOR_FOOTMAN,
+                                     (int(pos.x), int(pos.y)), 12)
+                    pygame.draw.circle(self.screen, COLOR_TEXT,
+                                     (int(pos.x), int(pos.y)), 12, 2)
+                else:
+                    # Archer: Green triangle
+                    points = [
+                        (pos.x, pos.y - 12),
+                        (pos.x - 10, pos.y + 8),
+                        (pos.x + 10, pos.y + 8)
+                    ]
+                    pygame.draw.polygon(self.screen, COLOR_ARCHER, points)
+                    pygame.draw.polygon(self.screen, COLOR_TEXT, points, 2)
         
-        # Draw wights
+        # Draw wights with HP bars
         for wight in self.game.wights:
             if wight.alive:
-                pygame.draw.rect(self.screen, (200, 50, 50),
-                               (int(wight.position.x) - 7, int(wight.position.y) - 7, 14, 14))
+                pos = wight.position
+                
+                # Wight body (red square)
+                size = 14
+                rect = pygame.Rect(int(pos.x - size // 2), int(pos.y - size // 2), size, size)
+                pygame.draw.rect(self.screen, COLOR_WIGHT, rect)
+                pygame.draw.rect(self.screen, COLOR_TEXT, rect, 2)
+                
+                # Wight HP bar
+                hp_bar_width = 20
+                hp_bar_height = 3
+                hp_bar_x = pos.x - hp_bar_width // 2
+                hp_bar_y = pos.y - 20
+                
+                pygame.draw.rect(self.screen, COLOR_HP_BAR_BG,
+                               (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
+                
+                wight_hp_ratio = wight.hp / wight.max_hp
+                pygame.draw.rect(self.screen, COLOR_HP_BAR,
+                               (hp_bar_x, hp_bar_y, int(hp_bar_width * wight_hp_ratio), hp_bar_height))
+        
+        # Draw UI overlay
+        stats = self.game.stats
+        ui_lines = [
+            f"AI Agent Playing",
+            f"Wave: {self.game.current_wave + 1}/5",
+            f"Soldiers: {sum(1 for s in self.game.soldiers if s.alive)}/{len(self.game.soldiers)}",
+            f"Wights Killed: {stats['wights_killed']}/300",
+            f"Phase: {self.game.phase.value.upper()}"
+        ]
+        
+        # Draw semi-transparent background for UI
+        ui_bg = pygame.Surface((250, 150))
+        ui_bg.set_alpha(180)
+        ui_bg.fill((0, 0, 0))
+        self.screen.blit(ui_bg, (10, 10))
+        
+        # Draw UI text
+        y_offset = 20
+        for line in ui_lines:
+            text = self.font_small.render(line, True, COLOR_TEXT)
+            self.screen.blit(text, (20, y_offset))
+            y_offset += 28
+        
+        # Draw legend
+        legend_y = TowerDefenseGame.HEIGHT - 100
+        legend_bg = pygame.Surface((200, 90))
+        legend_bg.set_alpha(180)
+        legend_bg.fill((0, 0, 0))
+        self.screen.blit(legend_bg, (10, legend_y))
+        
+        # Footman icon
+        pygame.draw.circle(self.screen, COLOR_FOOTMAN, (30, legend_y + 20), 10)
+        legend_text = self.font_small.render("Footman (Melee)", True, COLOR_TEXT)
+        self.screen.blit(legend_text, (50, legend_y + 12))
+        
+        # Archer icon
+        points = [(30, legend_y + 43), (20, legend_y + 58), (40, legend_y + 58)]
+        pygame.draw.polygon(self.screen, COLOR_ARCHER, points)
+        legend_text = self.font_small.render("Archer (Ranged)", True, COLOR_TEXT)
+        self.screen.blit(legend_text, (50, legend_y + 45))
         
         # Convert to numpy array
         return np.transpose(
@@ -355,6 +489,8 @@ class TowerDefenseEnv(gym.Env):
             self.screen = pygame.display.set_mode((TowerDefenseGame.WIDTH, TowerDefenseGame.HEIGHT))
             pygame.display.set_caption("Tower Defense - RL Agent")
             self.clock = pygame.time.Clock()
+            self.font_small = pygame.font.Font(None, 24)
+            self.font_medium = pygame.font.Font(None, 32)
             self.pygame_initialized = True
         
         # Get RGB array and display it

@@ -94,12 +94,18 @@ Watch for:
 # Standard evaluation
 python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 
-# Visual demo
+# Visual demo (with enhanced UI showing castle HP, unit types, stats)
 python evaluate_agent.py --model trained_models/best_model.zip --visualize
 
 # Compare with random
 python evaluate_agent.py --model trained_models/best_model.zip --compare
 ```
+
+**Visualization Features:**
+- Castle HP bar with color coding (green/orange/red)
+- Clear unit distinction: Blue circles (Footmen) vs Green triangles (Archers)
+- Real-time stats overlay (wave, soldiers, kills)
+- Unit legend for easy identification
 
 ## 📁 Project Structure
 
