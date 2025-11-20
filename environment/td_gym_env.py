@@ -183,19 +183,24 @@ class TowerDefenseEnv(gym.Env):
         reward = 0.0
         stats = self.game.stats
         
-        # Reward for killing wights
+        # Survival reward - reward for staying alive each step during combat
+        # Encourages longer survival and defensive strategies
+        if self.game.phase == GamePhase.COMBAT:
+            reward += 0.5  # +0.5 per combat step survived
+        
+        # Track wights killed (for stats, but no reward)
         wights_killed_this_step = stats['wights_killed'] - self.last_wights_killed
-        reward += wights_killed_this_step * 10.0
         self.last_wights_killed = stats['wights_killed']
+        # NOTE: Removed kill reward - focus is on castle protection
         
         # Penalty for losing soldiers (currently no soldier death mechanic, but keeping for future)
         soldiers_killed_this_step = stats['soldiers_killed'] - self.last_soldiers_killed
         reward -= soldiers_killed_this_step * 50.0
         self.last_soldiers_killed = stats['soldiers_killed']
         
-        # Penalty for castle taking damage
+        # Penalty for castle taking damage (INCREASED from -5 to -10)
         castle_damage_this_step = self.last_castle_hp - self.game.castle.hp
-        reward -= castle_damage_this_step * 5.0
+        reward -= castle_damage_this_step * 10.0
         self.last_castle_hp = self.game.castle.hp
         
         return reward
