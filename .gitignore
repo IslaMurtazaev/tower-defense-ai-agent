@@ -37,3 +37,4 @@ env/
 .DS_Store
 Thumbs.db
 
+trained_models/

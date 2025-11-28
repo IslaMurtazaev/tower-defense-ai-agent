@@ -35,7 +35,7 @@ from collections import deque
 SCREEN_W, SCREEN_H = 1280, 800
 FPS = 60
 
-# Random obstacle tuning (mirrors td_pyastar for consistency)
+# Random obstacle tuning
 OBSTACLE_COUNT = 40
 OBSTACLE_HALF_W_RANGE = (16, 46)
 OBSTACLE_HALF_H_RANGE = (24, 70)
@@ -77,9 +77,10 @@ NK_SWEEP_RADIUS = NK_SWEEP_RADIUS_CHOICE["B"]
 SOLDIER_RADIUS = 12
 SOLDIER_COLOR = (80, 100, 130)
 SOLDIER_SPEED = 160.0
-SOLDIER_MAX = 32
+SOLDIER_MAX = 4
 SOLDIER_ATTACK_RANGE = 30  # contact range
 SOLDIER_BURN_DURATION = 0.1  # seconds (instant burn animation)
+SOLDIER_IDLE_RETURN_TIME = 2.0
 
 # Heroes
 JON_RADIUS = 18
@@ -144,6 +145,9 @@ SOUND_FILES = {
 def dist(a,b): return math.hypot(a[0]-b[0], a[1]-b[1])
 def lerp(a,b,t): return a + (b-a)*t
 def clamp(x,a,b): return max(a, min(b, x))
+def point_in_view(point):
+    x, y = point
+    return 0 <= x <= SCREEN_W and 0 <= y <= SCREEN_H
 
 
 def _rects_overlap(ax, ay, ahw, ahh, bx, by, bhw, bhh, padding=0.0):
@@ -160,6 +164,7 @@ def generate_static_obstacles():
     obstacles = []
     attempts = 0
     max_attempts = OBSTACLE_COUNT * 12
+
     min_half_w, max_half_w = OBSTACLE_HALF_W_RANGE
     min_half_h, max_half_h = OBSTACLE_HALF_H_RANGE
 
@@ -170,9 +175,11 @@ def generate_static_obstacles():
         px = rng.uniform(OBSTACLE_SAFE_MARGIN + half_w, SCREEN_W - OBSTACLE_SAFE_MARGIN - half_w)
         py = rng.uniform(OBSTACLE_SAFE_MARGIN + half_h, SCREEN_H - OBSTACLE_SAFE_MARGIN - half_h)
 
-        if math.hypot(px - BASE_POS[0], py - BASE_POS[1]) <= BASE_RADIUS + OBSTACLE_BASE_BUFFER:
+        # keep a breathing room around the base so spawning isn't boxed in
+        if dist((px, py), BASE_POS) <= BASE_RADIUS + OBSTACLE_BASE_BUFFER:
             continue
 
+        # avoid tight clustering/overlap
         if any(
             _rects_overlap(
                 px, py, half_w, half_h,
@@ -195,31 +202,52 @@ def generate_static_obstacles():
 
 
 STATIC_OBSTACLES = generate_static_obstacles()
+dynamic_obstacles = []
+
+
+def active_dynamic_obstacles(current_time=None):
+    current_time = current_time or time.time()
+    return [
+        obs for obs in dynamic_obstacles
+        if obs.get("expires_at", current_time + 1) > current_time
+    ]
+
+
+def combined_obstacles(base=None):
+    obstacles = list(base) if base else list(STATIC_OBSTACLES)
+    obstacles.extend(active_dynamic_obstacles())
+    return obstacles
+
+
+def obstacle_slow_multiplier(position):
+    for obs in combined_obstacles():
+        if _point_in_obstacle(obs, position):
+            return 0.4
+    return 1.0
 
 
 def _point_in_obstacle(obs, point, padding=0.0):
     ox, oy = obs["pos"]
-    half_w = obs.get("half_w", 0) + padding
-    half_h = obs.get("half_h", 0) + padding
-    return abs(point[0] - ox) <= half_w and abs(point[1] - oy) <= half_h
-
+    if obs.get("type") == "rect":
+        half_w = obs.get("half_w", 0) + padding
+        half_h = obs.get("half_h", 0) + padding
+        return abs(point[0] - ox) <= half_w and abs(point[1] - oy) <= half_h
+    radius = obs.get("radius", 0) + padding
+    return dist(point, (ox, oy)) <= radius
 
 def _grid_dimensions():
     return SCREEN_W // PATH_GRID_SIZE, SCREEN_H // PATH_GRID_SIZE
-
 
 def _world_to_node(pos):
     gx = clamp(pos[0], 0, SCREEN_W - 1) // PATH_GRID_SIZE
     gy = clamp(pos[1], 0, SCREEN_H - 1) // PATH_GRID_SIZE
     return int(gx), int(gy)
 
-
 def _node_to_world(node):
     return (
         node[0] * PATH_GRID_SIZE + PATH_GRID_SIZE / 2,
         node[1] * PATH_GRID_SIZE + PATH_GRID_SIZE / 2
     )
-
 
 def _blocked_nodes(obstacles):
     grid_w, grid_h = _grid_dimensions()
@@ -234,9 +262,8 @@ def _blocked_nodes(obstacles):
                     break
     return blocked
 
-
 def astar_path(start, goal, obstacles=None):
-    obstacles = list(obstacles) if obstacles else list(STATIC_OBSTACLES)
+    obstacles = combined_obstacles(obstacles)
     grid_w, grid_h = _grid_dimensions()
     start_node = _world_to_node(start)
     goal_node = _world_to_node(goal)
@@ -284,6 +311,15 @@ def astar_path(start, goal, obstacles=None):
 
     return [start, goal]
 
+
+def path_length(points):
+    if not points or len(points) < 2:
+        return 0.0
+    total = 0.0
+    for i in range(len(points) - 1):
+        total += dist(points[i], points[i + 1])
+    return total
+
 # -------------------------
 # PATHS (radial hidden paths)
 # -------------------------
@@ -316,8 +352,7 @@ def point_on_view_edge(angle, base=BASE_POS):
     _, px, py = min(candidates, key=lambda item: item[0])
     return px, py
 
-
-def make_paths(num_paths=NUM_PATHS, base=BASE_POS):
+def make_paths(num_paths=NUM_PATHS, base=BASE_POS, outer_margin=60, mid_dist=300):
     paths = {}
     for i in range(num_paths):
         angle = 2*math.pi*(i/num_paths)
@@ -362,10 +397,12 @@ def pos_on_path_key(key, s):
 # -------------------------
 class SoundEngine:
     def __init__(self, sounds_dir=SOUNDS_DIR):
-        try:
-            pygame.mixer.init()
-        except Exception:
-            pass
+        # Don't reinitialize mixer if already initialized
+        if not pygame.mixer.get_init():
+            try:
+                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+            except Exception:
+                pass
         self.sounds = {}
         self.ambience = None
         self.ambience_playing = False
@@ -379,8 +416,21 @@ class SoundEngine:
                         self.ambience = pygame.mixer.Sound(path)
                     else:
                         self.sounds[key] = pygame.mixer.Sound(path)
-                except Exception:
+                except Exception as e:
                     self.sounds[key] = None
+                    print(f"Warning: Could not load sound {fname}: {e}")
+    def play_sound(self, key, volume=0.7):
+        """Play a sound effect if available and enabled."""
+        if not self.sfx_enabled:
+            return
+        sound = self.sounds.get(key)
+        if sound:
+            try:
+                sound.set_volume(volume)
+                sound.play()
+            except Exception:
+                pass
+
     def toggle_ambience(self):
         if not self.ambience: return
         if self.ambience_playing:
@@ -388,7 +438,9 @@ class SoundEngine:
             except: pass
             self.ambience_playing = False
         else:
-            try: self.ambience.play(loops=-1)
+            try:
+                self.ambience.set_volume(0.5)
+                self.ambience.play(loops=-1)
             except: pass
             self.ambience_playing = True
     def set_sfx(self, on):
@@ -408,13 +460,16 @@ class Enemy:
         self.reached = False
         self.phase = random.uniform(0, 2*math.pi)
         self.is_nk = False
+        self.claimed_until = 0.0
     def step(self, dt):
         if not self.alive:
             return
         if self.spawn_delay > 0:
             self.spawn_delay -= dt
             return
-        self.s += self.speed * dt
+        current_pos = pos_on_path_key(self.path_key, self.s)
+        slow = obstacle_slow_multiplier(current_pos)
+        self.s += self.speed * dt * slow
         if self.s >= PATH_TOTAL[self.path_key]:
             self.alive = False
             self.reached = True
@@ -444,14 +499,16 @@ class NightKing(Enemy):
             return None
         # move in until engaged
         if not self.locked_for_battle:
-            self.s += self.speed * dt
+            slow = obstacle_slow_multiplier(pos_on_path_key(self.path_key, self.s))
+            self.s += self.speed * dt * slow
             px,py = pos_on_path_key(self.path_key, self.s)
             # lock when within engage radius of base
             if dist((px,py), BASE_POS) <= NK_ENGAGE_RADIUS:
                 self.locked_for_battle = True
         else:
             # when locked, continue to station near base (advance slowly)
-            self.s += (self.speed * 0.4) * dt
+            slow = obstacle_slow_multiplier(pos_on_path_key(self.path_key, self.s))
+            self.s += (self.speed * 0.4) * dt * slow
         # sweep cooldown countdown & trigger if ready
         self.sweep_cooldown -= dt
         if self.sweep_cooldown <= 0 and self.alive and self.locked_for_battle:
@@ -503,16 +560,102 @@ class Soldier:
         self.spawn_angle = spawn_angle if spawn_angle is not None else random.uniform(0,2*math.pi)
         self.speed = SOLDIER_SPEED
         self.cooldown = 0.0
+        self.current_target = None
+        self.home_radius = BASE_RADIUS + 72
+        self.home_position = (
+            BASE_POS[0] + math.cos(self.spawn_angle) * self.home_radius,
+            BASE_POS[1] + math.sin(self.spawn_angle) * self.home_radius
+        )
+        self.returning_home = False
         self.current_path = []
         self.target_last_pos = None
-        self.repath_timer = 0.0
+        self.idle_timer = 0.0
         # Note: per final decision, soldiers have no retreat state; they always attack nearest enemy.
         # They do not "learn" the NK is invincible.
+
+    def _release_target(self):
+        """Release the currently assigned wight target, if any."""
+        self.current_target = None
+        self.current_path = []
+        self.target_last_pos = None
+        self.idle_timer = 0.0
+
+    def _build_obstacles(self):
+        obstacles = combined_obstacles()
+        obstacles.append({"type": "circle", "pos": BASE_POS, "radius": BASE_RADIUS + 24})
+        return obstacles
+
+    def _plan_path(self, destination):
+        path = astar_path((self.x, self.y), destination, self._build_obstacles())
+        if not path:
+            self.current_path = []
+            return
+        filtered = []
+        for pt in path:
+            if dist(pt, (self.x, self.y)) > 6:
+                filtered.append(pt)
+        self.current_path = filtered
+
+    def _follow_path(self, dt):
+        while self.current_path:
+            waypoint = self.current_path[0]
+            if dist((self.x, self.y), waypoint) <= 6:
+                self.current_path.pop(0)
+                continue
+            self.move_toward(waypoint[0], waypoint[1], dt)
+            return True
+        return False
+
     def find_nearest_enemy(self, enemies):
         alive = [e for e in enemies if e.alive and e.spawn_delay <= 0]
-        if not alive: return None
-        alive.sort(key=lambda e: dist((self.x,self.y), e.pos()))
-        return alive[0]
+        if not alive:
+            self._release_target()
+            return None
+
+        if self.current_target and self.current_target.alive:
+            return self.current_target
+
+        candidates = [
+            e for e in alive
+            if point_in_view(e.pos()) or getattr(e, 'locked_for_battle', False)
+        ]
+
+        best_target = None
+        best_path = None
+        best_score = None
+
+        for enemy in candidates:
+            target_pos = enemy.pos()
+            path = astar_path((self.x, self.y), target_pos, self._build_obstacles())
+            if not path or len(path) < 2:
+                continue
+            soldier_time = path_length(path) / max(self.speed, 1)
+
+            if getattr(enemy, 'is_nk', False):
+                enemy_time = dist(target_pos, BASE_POS) / max(enemy.speed, 1)
+            else:
+                remaining = max(PATH_TOTAL.get(enemy.path_key, 0) - enemy.s, 0)
+                enemy_time = remaining / max(enemy.speed, 1)
+
+            score = enemy_time - soldier_time
+            claim_penalty = max(0.0, enemy.claimed_until - time.time())
+            score += claim_penalty * 0.8
+            if best_score is None or score < best_score:
+                best_score = score
+                best_target = enemy
+                best_path = path[1:]
+
+        if best_target is not None:
+            self.current_target = best_target
+            self.current_path = best_path
+            self.returning_home = False
+            self.idle_timer = 0.0
+            self.target_last_pos = best_target.pos()
+            best_target.claimed_until = time.time() + 1.5
+            return best_target
+
+        self._release_target()
+        return None
     def move_toward(self, tx, ty, dt, factor=1.0):
         dx = tx - self.x; dy = ty - self.y
         d = math.hypot(dx,dy)
@@ -520,97 +663,87 @@ class Soldier:
             nx, ny = dx/d, dy/d
             self.x += nx * self.speed * dt * factor
             self.y += ny * self.speed * dt * factor
-    def _plan_path(self, destination):
-        path = astar_path((self.x, self.y), destination, STATIC_OBSTACLES)
-        if path and len(path) > 1:
-            self.current_path = path[1:]
-        else:
-            self.current_path = []
-        self.target_last_pos = destination
-        self.repath_timer = 0.0
-
-    def _advance_path(self, dt):
-        remaining = dt
-        moved = False
-        while self.current_path and remaining > 0:
-            tx, ty = self.current_path[0]
-            dx = tx - self.x
-            dy = ty - self.y
-            seg_dist = math.hypot(dx, dy)
-            if seg_dist < 1.0:
-                self.x, self.y = tx, ty
-                self.current_path.pop(0)
-                moved = True
-                continue
-            step_dist = self.speed * remaining
-            if step_dist >= seg_dist:
-                self.x, self.y = tx, ty
-                remaining -= seg_dist / self.speed
-                self.current_path.pop(0)
-                moved = True
-            else:
-                nx = dx / seg_dist
-                ny = dy / seg_dist
-                self.x += nx * step_dist
-                self.y += ny * step_dist
-                remaining = 0
-                moved = True
-        return moved
-
+            # Keep soldiers within screen bounds
+            self.x = clamp(self.x, 20, SCREEN_W - 20)
+            self.y = clamp(self.y, 20, SCREEN_H - 20)
     def step(self, dt, enemies, burns, sound_engine, stats):
         # Always look for nearest enemy (wight or NK)
         if self.cooldown > 0:
             self.cooldown -= dt
-        self.repath_timer += dt
         target = self.find_nearest_enemy(enemies)
         if target is None:
-            # wander slightly around base rim
-            rim_x = BASE_POS[0] + math.cos(self.spawn_angle) * (BASE_RADIUS + 72)
-            rim_y = BASE_POS[1] + math.sin(self.spawn_angle) * (BASE_RADIUS + 72)
-            # gentle approach to rim
-            self.move_toward(rim_x + math.sin(self.phase)*8, rim_y + math.cos(self.phase)*8, dt, factor=0.7)
-            self.current_path = []
             self.target_last_pos = None
+            self.idle_timer += dt
+            if self.idle_timer < SOLDIER_IDLE_RETURN_TIME:
+                # hold current forward position with slight drift
+                jitter_x = math.sin(self.phase + self.idle_timer * 2) * 6
+                jitter_y = math.cos(self.phase + self.idle_timer * 2) * 6
+                self.move_toward(self.x + jitter_x, self.y + jitter_y, dt, factor=0.3)
+                self.current_path = []
+                return (False, None, None, None)
+
+            if dist((self.x, self.y), self.home_position) > 12:
+                if not self.current_path:
+                    self._plan_path(self.home_position)
+                if self._follow_path(dt):
+                    self.returning_home = True
+                    return (False, None, None, None)
+            else:
+                self.returning_home = False
+                self.idle_timer = 0.0
             return (False, None, None, None)
+        self.idle_timer = 0.0
         tx, ty = target.pos()
-        d = dist((self.x,self.y), (tx,ty))
-        if (
-            self.target_last_pos is None or
-            dist(self.target_last_pos, (tx, ty)) > 24 or
-            not self.current_path or
-            self.repath_timer > 1.5
-        ):
+        if (self.target_last_pos is None or
+                dist(self.target_last_pos, (tx, ty)) > PATH_GRID_SIZE / 2 or
+                not self.current_path):
             self._plan_path((tx, ty))
-        else:
-            # keep goal updated even if we don't replan now
             self.target_last_pos = (tx, ty)
-        if self.current_path:
-            self._advance_path(dt)
-            d = dist((self.x,self.y), (tx,ty))
+        if self._follow_path(dt):
+            return (False, None, None, None)
+        d = dist((self.x,self.y), (tx,ty))
         # If it's a wight and contact range -> instant burn-kill
         if not getattr(target, "is_nk", False):
             if d <= (SOLDIER_ATTACK_RANGE + ENEMY_RADIUS):
                 # kill wight instantly
                 burns.append(BurningEffect(tx, ty))
                 target.alive = False
+                target.claimed_until = 0.0
                 stats['wights_killed'] += 1
-                if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("die"):
-                    try: sound_engine.sounds["die"].play()
-                    except: pass
+                self._release_target()
+                if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                    if hasattr(sound_engine, "play_sound"):
+                        sound_engine.play_sound("die", volume=0.6)
+                    elif sound_engine.sounds.get("die"):
+                        try:
+                            sound_engine.sounds["die"].set_volume(0.6)
+                            sound_engine.sounds["die"].play()
+                        except: pass
                 return (False, None, None, None)
-            return (False, None, None, None)
+            else:
+                # approach
+                self.move_toward(tx, ty, dt)
+                return (False, None, None, None)
         else:
             # target is a Night King: soldiers will still approach and attempt to hit (but deal 0)
+            self._release_target()
             if d <= (SOLDIER_ATTACK_RANGE + NK_RADIUS):
                 # "attack" - but does 0 damage; remain in place (hero must finish NK)
                 # make a small recoil or visual hit (no hp effect)
-                if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("hit"):
+                if sound_engine and getattr(sound_engine, "sfx_enabled", False):
                     # play a faint hit sound to indicate useless strikes (if available)
-                    try: sound_engine.sounds["hit"].play()
-                    except: pass
+                    if hasattr(sound_engine, "play_sound"):
+                        sound_engine.play_sound("hit", volume=0.3)
+                    elif sound_engine.sounds.get("hit"):
+                        try:
+                            sound_engine.sounds["hit"].set_volume(0.3)
+                            sound_engine.sounds["hit"].play()
+                        except: pass
                 # do not change NK hp
                 return (False, None, None, None)
-            return (False, None, None, None)
+            else:
+                self.move_toward(tx, ty, dt)
+                return (False, None, None, None)
     def draw(self, surf, font):
         pygame.draw.circle(surf, (22,22,26), (int(self.x), int(self.y)), SOLDIER_RADIUS+4)
         pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), SOLDIER_RADIUS)
@@ -636,9 +769,9 @@ class Jon:
         self.path_target = None
 
     def _plan_path(self, destination):
-        obstacles = list(STATIC_OBSTACLES)
-        obstacles.append({"type": "circle", "pos": BASE_POS, "radius": BASE_RADIUS + 24})
-        path = astar_path((self.x, self.y), destination, obstacles)
+        base_obs = list(STATIC_OBSTACLES)
+        base_obs.append({"type": "circle", "pos": BASE_POS, "radius": BASE_RADIUS + 24})
+        path = astar_path((self.x, self.y), destination, base_obs)
         if path and len(path) > 1:
             self.current_path = path[1:]
         else:
@@ -721,9 +854,14 @@ class Jon:
                 self.swinging = True
                 self.swing_prog = 0.0
                 self.target.hp -= JON_DAMAGE
-                if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("jon"):
-                    try: sound_engine.sounds["jon"].play()
-                    except: pass
+                if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                    if hasattr(sound_engine, "play_sound"):
+                        sound_engine.play_sound("jon", volume=0.7)
+                    elif sound_engine.sounds.get("jon"):
+                        try:
+                            sound_engine.sounds["jon"].set_volume(0.7)
+                            sound_engine.sounds["jon"].play()
+                        except: pass
                 self.cool = JON_COOLDOWN
                 if self.target.hp <= 0:
                     self.target.alive = False
@@ -765,9 +903,9 @@ class Daenerys:
         self.path_target = None
 
     def _plan_path(self, destination):
-        obstacles = list(STATIC_OBSTACLES)
-        obstacles.append({"type": "circle", "pos": BASE_POS, "radius": BASE_RADIUS + 24})
-        path = astar_path((self.x, self.y), destination, obstacles)
+        base_obs = list(STATIC_OBSTACLES)
+        base_obs.append({"type": "circle", "pos": BASE_POS, "radius": BASE_RADIUS + 24})
+        path = astar_path((self.x, self.y), destination, base_obs)
         if path and len(path) > 1:
             self.current_path = path[1:]
         else:
@@ -844,10 +982,15 @@ class Daenerys:
             self._clear_path()
             self.breathing = True
             self.target.hp -= DRAGON_BREATH_DPS * dt
-            if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("breath"):
+            if sound_engine and getattr(sound_engine, "sfx_enabled", False):
                 if random.random() < 0.05:
-                    try: sound_engine.sounds["breath"].play()
-                    except: pass
+                    if hasattr(sound_engine, "play_sound"):
+                        sound_engine.play_sound("breath", volume=0.5)
+                    elif sound_engine.sounds.get("breath"):
+                        try:
+                            sound_engine.sounds["breath"].set_volume(0.5)
+                            sound_engine.sounds["breath"].play()
+                        except: pass
             if self.target.hp <= 0:
                 self.target.alive = False
                 stats['nk_kills'] += 1
@@ -902,10 +1045,12 @@ class BranVision:
 def run():
     global NEXT_NK_DELAY
     pygame.init()
+    # Initialize mixer with proper settings
     try:
-        pygame.mixer.init()
-    except:
-        pass
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+    except Exception as e:
+        print(f"Warning: Could not initialize sound mixer: {e}")
 
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("Winterfell Defense — Final")
@@ -918,10 +1063,15 @@ def run():
     try:
         sound_engine = SoundEngine()
         if sound_engine.ambience and sound_engine.ambience_enabled:
-            try: sound_engine.ambience.play(loops=-1); sound_engine.ambience_playing = True
-            except: pass
-    except:
-        sound_engine = type("SE", (), {"sfx_enabled": False, "sounds": {}, "ambience": None, "ambience_playing": False, "toggle_ambience": lambda self=None: None, "set_sfx": lambda self, on=None: None})()
+            try:
+                sound_engine.ambience.set_volume(0.5)
+                sound_engine.ambience.play(loops=-1)
+                sound_engine.ambience_playing = True
+            except Exception as e:
+                print(f"Warning: Could not play ambience: {e}")
+    except Exception as e:
+        print(f"Warning: Could not initialize sound engine: {e}")
+        sound_engine = type("SE", (), {"sfx_enabled": False, "sounds": {}, "ambience": None, "ambience_playing": False, "toggle_ambience": lambda self=None: None, "set_sfx": lambda self, on=None: None, "play_sound": lambda self, key, volume=0.7: None})()
 
     # game state
     base_hp = BASE_HP_MAX
@@ -1005,9 +1155,14 @@ def run():
                 ang = (2*math.pi)*(ns['path_key'] / NUM_PATHS)
                 bran.start(ang)
                 # small sound if available
-                if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("bran"):
-                    try: sound_engine.sounds["bran"].play()
-                    except: pass
+                if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                    if hasattr(sound_engine, "play_sound"):
+                        sound_engine.play_sound("bran", volume=0.6)
+                    elif sound_engine.sounds.get("bran"):
+                        try:
+                            sound_engine.sounds["bran"].set_volume(0.6)
+                            sound_engine.sounds["bran"].play()
+                        except: pass
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1053,7 +1208,7 @@ def run():
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and not game_over:
                 # Left click deploy soldier manually
                 mx, my = event.pos
-                if len(soldiers) < SOLDIER_MAX:
+                if total_soldiers_deployed < SOLDIER_MAX:
                     ang = math.atan2(my - BASE_POS[1], mx - BASE_POS[0])
                     s = Soldier((mx, my), spawn_angle=ang)
                     soldiers.append(s)
@@ -1078,9 +1233,14 @@ def run():
                     burst = max(WAVE_BURST_BASE, int(math.ceil(WAVE_BURST_BASE * current_wave_pressure)))
                     for _ in range(burst):
                         spawn_wight()
-                    if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("deploy"):
-                        try: sound_engine.sounds["deploy"].play()
-                        except: pass
+                    if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                        if hasattr(sound_engine, "play_sound"):
+                            sound_engine.play_sound("deploy", volume=0.8)
+                        elif sound_engine.sounds.get("deploy"):
+                            try:
+                                sound_engine.sounds["deploy"].set_volume(0.8)
+                                sound_engine.sounds["deploy"].play()
+                            except: pass
             elif nk_state == "active":
                 # if NK is dead or has left (reached base), process and go to cooldown
                 if current_nk and (not current_nk.alive or current_nk.reached):
@@ -1124,7 +1284,8 @@ def run():
                 while spawn_timer >= spawn_interval * passive_factor:
                     spawn_wight(); spawn_timer -= spawn_interval * passive_factor
 
-            # auto-deploy soldiers if enemies near base (this just spawns extra soldiers)
+            # auto-deploy soldiers using A* controller logic
+            # Only deploy if existing soldiers cannot intercept enemies using A*
             danger_key = None
             for e in enemies:
                 if e.spawn_delay <= 0 and e.alive:
@@ -1132,16 +1293,28 @@ def run():
                     if dist((ex,ey), BASE_POS) <= AUTO_DEPLOY_RANGE:
                         danger_key = e.path_key
                         break
-            if danger_key is not None and auto_deploy_timer >= AUTO_DEPLOY_COOLDOWN and len(soldiers) < SOLDIER_MAX:
-                auto_deploy_timer = 0.0
-                start_point = PATH_SEGMENTS[danger_key][0]['a']
-                ang = math.atan2(start_point[1] - BASE_POS[1], start_point[0] - BASE_POS[0])
-                spawn_dist = BASE_RADIUS + 36
-                sx = BASE_POS[0] + math.cos(ang) * spawn_dist
-                sy = BASE_POS[1] + math.sin(ang) * spawn_dist
-                s = Soldier((sx, sy), spawn_angle=ang)
-                soldiers.append(s)
-                total_soldiers_deployed += 1
+
+            enemy_positions = []
+            for e in enemies:
+                if e.alive and not e.is_nk:
+                    pos = e.pos()
+                    if point_in_view(pos):
+                        enemy_positions.append(pos)
+
+            soldier_positions = [(s.x, s.y) for s in soldiers]
+
+            if (enemy_positions and total_soldiers_deployed < SOLDIER_MAX and
+                    should_deploy_soldiers(enemy_positions, soldier_positions, BASE_POS, ENEMY_SPEED, SOLDIER_SPEED)):
+                if auto_deploy_timer >= AUTO_DEPLOY_COOLDOWN:
+                    auto_deploy_timer = 0.0
+                    # deploy soldier normally from nearest direction
+                    key = danger_key if danger_key is not None else random.randrange(NUM_PATHS)
+                    start_point = PATH_SEGMENTS[key][0]['a']
+                    ang = math.atan2(start_point[1] - BASE_POS[1], start_point[0] - BASE_POS[0])
+                    sx = BASE_POS[0] + math.cos(ang) * (BASE_RADIUS + 36)
+                    sy = BASE_POS[1] + math.sin(ang) * (BASE_RADIUS + 36)
+                    soldiers.append(Soldier((sx, sy), spawn_angle=ang))
+                    total_soldiers_deployed += 1
 
             # Update enemies and NKs
             # iterate copies because we may remove during iteration
@@ -1151,18 +1324,36 @@ def run():
                     if res == "sweep":
                         # perform sweep: all soldiers within sweep radius die
                         kx, ky = e.pos()
+                        dynamic_obstacles.append({
+                            "type": "circle",
+                            "pos": (kx, ky),
+                            "radius": NK_SWEEP_RADIUS + 10,
+                            "expires_at": time.time() + 10.0
+                        })
+                        dynamic_obstacles.append({
+                            "pos": (kx, ky),
+                            "radius": NK_SWEEP_RADIUS + 10,
+                            "expires_at": time.time() + 10.0
+                        })
                         for s in list(soldiers):
                             if dist((s.x,s.y), (kx,ky)) <= NK_SWEEP_RADIUS:
                                 # kill soldier
                                 try:
+                                    if hasattr(s, "_release_target"):
+                                        s._release_target()
                                     soldiers.remove(s)
                                 except ValueError:
                                     pass
                                 dead_soldiers.append(DeadSoldier(s.x, s.y, s.color))
                                 stats['soldiers_killed'] += 1
-                                if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("shock"):
-                                    try: sound_engine.sounds["shock"].play()
-                                    except: pass
+                                if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                                    if hasattr(sound_engine, "play_sound"):
+                                        sound_engine.play_sound("shock", volume=0.7)
+                                    elif sound_engine.sounds.get("shock"):
+                                        try:
+                                            sound_engine.sounds["shock"].set_volume(0.7)
+                                            sound_engine.sounds["shock"].play()
+                                        except: pass
                     # if NK locked for battle and hero not yet deployed, deploy hero(s)
                     if e.locked_for_battle and e.alive:
                         hero_present = any((isinstance(h, Jon) and h.active and h.target is e) or (isinstance(h, Daenerys) and h.active and h.target is e) for h in heroes)
@@ -1182,9 +1373,14 @@ def run():
                 if not getattr(e, "is_nk", False):
                     if not e.alive and getattr(e, "reached", False):
                         base_hp -= 1
-                        if sound_engine and getattr(sound_engine, "sfx_enabled", False) and sound_engine.sounds.get("base"):
-                            try: sound_engine.sounds["base"].play()
-                            except: pass
+                        if sound_engine and getattr(sound_engine, "sfx_enabled", False):
+                            if hasattr(sound_engine, "play_sound"):
+                                sound_engine.play_sound("base", volume=0.6)
+                            elif sound_engine.sounds.get("base"):
+                                try:
+                                    sound_engine.sounds["base"].set_volume(0.6)
+                                    sound_engine.sounds["base"].play()
+                                except: pass
                         try: enemies.remove(e)
                         except: pass
                     elif not e.alive:
@@ -1273,16 +1469,24 @@ def run():
                 pygame.draw.line(grid_s, (100,110,120,40), (0,y), (SCREEN_W,y))
             screen.blit(grid_s, (0,0))
 
-        # draw static obstacles for visual clarity
-        obstacle_layer = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        for obs in STATIC_OBSTACLES:
-            px, py = obs["pos"]
-            half_w = obs.get("half_w", 0)
-            half_h = obs.get("half_h", 0)
-            rect = pygame.Rect(int(px - half_w), int(py - half_h), int(half_w * 2), int(half_h * 2))
-            pygame.draw.rect(obstacle_layer, (90, 110, 140, 180), rect, border_radius=8)
-            pygame.draw.rect(obstacle_layer, (30, 40, 55, 220), rect, width=2, border_radius=8)
-        screen.blit(obstacle_layer, (0,0))
+        # draw static obstacles (for debugging / visual clarity)
+        for obs in combined_obstacles():
+            if obs.get("type") == "rect":
+                half_w = obs.get("half_w", 30)
+                half_h = obs.get("half_h", 30)
+                rect = pygame.Rect(
+                    int(obs["pos"][0] - half_w),
+                    int(obs["pos"][1] - half_h),
+                    int(half_w * 2),
+                    int(half_h * 2)
+                )
+                pygame.draw.rect(screen, (48,54,66), rect, border_radius=6)
+                pygame.draw.rect(screen, (30,34,44), rect, 3, border_radius=6)
+            else:
+                ox, oy = int(obs["pos"][0]), int(obs["pos"][1])
+                radius = obs.get("radius", 30)
+                pygame.draw.circle(screen, (48,54,66), (ox, oy), radius)
+                pygame.draw.circle(screen, (30,34,44), (ox, oy), radius, 3)
 
         # draw dead soldier ragdolls (behind)
         for ds in dead_soldiers:
