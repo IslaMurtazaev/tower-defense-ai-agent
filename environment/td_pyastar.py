@@ -570,6 +570,7 @@ class Soldier:
         self.current_path = []
         self.target_last_pos = None
         self.idle_timer = 0.0
+        self.repath_timer = 0.0
         # Note: per final decision, soldiers have no retreat state; they always attack nearest enemy.
         # They do not "learn" the NK is invincible.
 
@@ -620,12 +621,23 @@ class Soldier:
             if point_in_view(e.pos()) or getattr(e, 'locked_for_battle', False)
         ]
 
+        # Performance optimization: pre-filter by straight-line distance first
+        # Only run expensive A* on top 3 closest enemies
+        candidates_with_dist = []
+        for enemy in candidates:
+            target_pos = enemy.pos()
+            straight_dist = dist((self.x, self.y), target_pos)
+            candidates_with_dist.append((straight_dist, enemy, target_pos))
+
+        # Sort by distance and take top 3
+        candidates_with_dist.sort(key=lambda x: x[0])
+        top_candidates = candidates_with_dist[:3]
+
         best_target = None
         best_path = None
         best_score = None
 
-        for enemy in candidates:
-            target_pos = enemy.pos()
+        for _, enemy, target_pos in top_candidates:
             path = astar_path((self.x, self.y), target_pos, self._build_obstacles())
             if not path or len(path) < 2:
                 continue
@@ -693,12 +705,16 @@ class Soldier:
                 self.idle_timer = 0.0
             return (False, None, None, None)
         self.idle_timer = 0.0
+        self.repath_timer += dt
         tx, ty = target.pos()
+        # Only replan if target moved significantly OR path is empty OR enough time passed
         if (self.target_last_pos is None or
                 dist(self.target_last_pos, (tx, ty)) > PATH_GRID_SIZE / 2 or
-                not self.current_path):
+                not self.current_path or
+                self.repath_timer > 1.5):
             self._plan_path((tx, ty))
             self.target_last_pos = (tx, ty)
+            self.repath_timer = 0.0
         if self._follow_path(dt):
             return (False, None, None, None)
         d = dist((self.x,self.y), (tx,ty))

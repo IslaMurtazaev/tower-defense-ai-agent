@@ -586,7 +586,7 @@ class Soldier:
             self.target_last_pos = (tx, ty)
         if self.current_path:
             self._advance_path(dt)
-            d = dist((self.x,self.y), (tx,ty))
+        d = dist((self.x,self.y), (tx,ty))
         # If it's a wight and contact range -> instant burn-kill
         if not getattr(target, "is_nk", False):
             if d <= (SOLDIER_ATTACK_RANGE + ENEMY_RADIUS):
@@ -598,7 +598,7 @@ class Soldier:
                     try: sound_engine.sounds["die"].play()
                     except: pass
                 return (False, None, None, None)
-            return (False, None, None, None)
+                return (False, None, None, None)
         else:
             # target is a Night King: soldiers will still approach and attempt to hit (but deal 0)
             if d <= (SOLDIER_ATTACK_RANGE + NK_RADIUS):
@@ -610,7 +610,7 @@ class Soldier:
                     except: pass
                 # do not change NK hp
                 return (False, None, None, None)
-            return (False, None, None, None)
+                return (False, None, None, None)
     def draw(self, surf, font):
         pygame.draw.circle(surf, (22,22,26), (int(self.x), int(self.y)), SOLDIER_RADIUS+4)
         pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), SOLDIER_RADIUS)
