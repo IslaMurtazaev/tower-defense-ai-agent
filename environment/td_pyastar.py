@@ -552,6 +552,32 @@ class DeadSoldier:
         pygame.draw.circle(s, (self.color[0], self.color[1], self.color[2], self.fade), (22,22), 14)
         surf.blit(s, (self.x-22, self.y-22))
 
+class BaseHitEffect:
+    def __init__(self):
+        self.age = 0.0
+        self.life = 0.4  # short flash effect
+        self.intensity = 1.0
+    def step(self, dt):
+        self.age += dt
+        return self.age >= self.life
+    def draw(self, surf, base_pos, base_radius):
+        if self.age >= self.life:
+            return
+        frac = clamp(1.0 - self.age/self.life, 0.0, 1.0)
+        # Create expanding flash effect
+        flash_radius = int(base_radius * (1.0 + frac * 0.8))
+        flash_surf = pygame.Surface((flash_radius*2+20, flash_radius*2+20), pygame.SRCALPHA)
+        alpha = int(180 * frac)
+        # Outer glow
+        pygame.draw.circle(flash_surf, (255, 100, 100, alpha), (flash_radius+10, flash_radius+10), flash_radius)
+        # Inner bright core
+        core_alpha = int(255 * frac)
+        pygame.draw.circle(flash_surf, (255, 200, 200, core_alpha), (flash_radius+10, flash_radius+10), int(flash_radius * 0.4))
+        # Red impact ring
+        ring_alpha = int(220 * frac)
+        pygame.draw.circle(flash_surf, (255, 60, 60, ring_alpha), (flash_radius+10, flash_radius+10), int(flash_radius * 0.6), width=3)
+        surf.blit(flash_surf, (int(base_pos[0] - flash_radius - 10), int(base_pos[1] - flash_radius - 10)))
+
 class Soldier:
     def __init__(self, pos, spawn_angle=None):
         self.x, self.y = pos
@@ -1097,6 +1123,7 @@ def run():
     heroes = []
     burns = []
     dead_soldiers = []
+    base_hit_effects = []
 
     # snow
     snow = [ [random.uniform(0, SCREEN_W), random.uniform(-SCREEN_H,0), random.uniform(20,120), random.uniform(1.2,3.8), random.uniform(-18,18), random.uniform(100,240)] for _ in range(SNOW_BASE) ]
@@ -1188,7 +1215,7 @@ def run():
                     paused = not paused
                 elif event.key == pygame.K_r:
                     # reset everything
-                    soldiers.clear(); enemies.clear(); nks.clear(); heroes.clear(); burns.clear(); dead_soldiers.clear()
+                    soldiers.clear(); enemies.clear(); nks.clear(); heroes.clear(); burns.clear(); dead_soldiers.clear(); base_hit_effects.clear()
                     snow = [ [random.uniform(0, SCREEN_W), random.uniform(-SCREEN_H,0), random.uniform(20,120), random.uniform(1.2,3.8), random.uniform(-18,18), random.uniform(100,240)] for _ in range(SNOW_BASE) ]
                     for _ in range(12):
                         spawn_wight()
@@ -1389,6 +1416,8 @@ def run():
                 if not getattr(e, "is_nk", False):
                     if not e.alive and getattr(e, "reached", False):
                         base_hp -= 1
+                        # Create visual impact effect
+                        base_hit_effects.append(BaseHitEffect())
                         if sound_engine and getattr(sound_engine, "sfx_enabled", False):
                             if hasattr(sound_engine, "play_sound"):
                                 sound_engine.play_sound("base", volume=0.6)
@@ -1413,6 +1442,12 @@ def run():
             for b in list(burns):
                 if b.step(dt):
                     try: burns.remove(b)
+                    except: pass
+
+            # update base hit effects
+            for hit_effect in list(base_hit_effects):
+                if hit_effect.step(dt):
+                    try: base_hit_effects.remove(hit_effect)
                     except: pass
 
             # hero update
@@ -1573,6 +1608,10 @@ def run():
         # burn effects (wight death flashes)
         for b in burns:
             b.draw(screen)
+
+        # draw base hit effects (before base so base appears on top)
+        for hit_effect in base_hit_effects:
+            hit_effect.draw(screen, BASE_POS, BASE_RADIUS)
 
         # draw base (on top)
         pygame.draw.circle(screen, (50,50,60), (BASE_POS[0], BASE_POS[1]), BASE_RADIUS)
