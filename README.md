@@ -1,92 +1,28 @@
-# 🛡️ Optimized Defender Deployment in a Tower Defence Game
+# Tower Defense AI Agent
 
-*"What is dead may never die… but with good AI, it dies much faster."*
+A reinforcement learning project for training AI agents to play a Game of Thrones-inspired tower defense game.
 
-**Intro to AI — Final Project**
+## Project Overview
 
-**Authors:** Islam Murtazaev, Leonel Mainsah Ngu, Raymond Frimpong Amoateng
+This project implements a tower defense game where an AI agent learns to strategically place soldiers to defend Winterfell against waves of wights and Night Kings. The agent uses Approximate Q-Learning to learn optimal placement strategies.
 
-## ❄️ Winter Is Coming… and So Are the Reinforcement Learning Agents
+## Features
 
-Imagine you are standing atop the battlements of Winterfell.
+- **Game Engine**: Full tower defense game with soldiers, wights, Night Kings, and heroes
+- **RL Environment**: Gymnasium-compatible environment for training agents
+- **Q-Learning Agent**: Approximate Q-Learning implementation with feature-based value approximation
+- **Visualization**: Watch trained agents play the game in real-time
+- **Training Tools**: Scripts for training, evaluation, and visualization
 
-The Night King marches from the far North with an endless horde of wights.
-
-Your resources are limited. Your defenses are few. Your survival depends entirely on where, when, and how you deploy your soldiers.
-
-In Game of Thrones, this challenge ended… poorly for many.
-
-In this project, we ask:
-
-**Can AI do better?**
-
-**Can optimized defender placement — powered by A* planning and reinforcement learning — hold the line against a simulated army of the dead?**
-
-This repository contains our attempt to answer that question.
-
-## 🧠 Project Overview
-
-We built a Tower Defence (TD) environment inspired by the tactical tension of the Battle of Winterfell using Pygame.
-
-This environment serves as the foundation for training AI agents that must:
-
-- **Predict enemy movement** (like Bran watching from the Weirwood),
-- **Allocate scarce resources** (as Daenerys and Jon failed to do),
-- **And optimize defender strategy** better than any panicked human commander.
-
-## 🎮 Game Features
-
-### 🏰 Core Mechanics
-
-- **Soldiers**: Deploy soldiers that automatically target and eliminate nearby wights. Soldiers deal 0 damage to Night Kings.
-- **Wights**: Ordinary undead enemies that spawn continuously. Soldiers kill wights instantly on contact with a burn animation.
-- **Night Kings**: Boss enemies that spawn in 5 scheduled waves. Each Night King:
-  - Approaches Winterfell on a radial path
-  - Locks into battle when within range (340px)
-  - Performs a devastating AOE sweep attack every 1.5 seconds that instantly kills all soldiers in radius
-  - Can only be damaged by heroes
-
-### ⚔️ Heroes
-
-- **Jon Snow**: Deploys automatically when a Night King engages. Wields Longclaw and deals 60 damage per strike.
-- **Daenerys & Drogon**: Deploys automatically when a Night King engages. Breathes dragon fire with 160 DPS at 300px range.
-- Only heroes can damage Night Kings; soldiers are ineffective against them.
-
-### 🔮 Special Features
-
-- **Bran the Seer**: Provides a raven vision overlay warning 10 seconds before each Night King spawns
-- **Auto-deploy**: Soldiers automatically deploy when enemies approach within 520px of the base
-- **Dynamic snow**: Snow intensity increases during Night King battles
-- **Victory condition**: Defeat all 5 Night Kings to win
-- **Defeat condition**: The base falls when its HP reaches 0
-
-## 🎯 Controls
-
-- **Left Click**: Place a soldier (max 32 active)
-- **SPACE**: Pause/Resume game
-- **R**: Reset game
-- **G**: Toggle grid overlay
-- **S**: Toggle snow effects
-- **M**: Toggle background music
-- **V**: Toggle sound effects
-- **Q**: Quit game
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.10+
-- Pygame 2.6.1+
-
-### Installation
+## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/IslaMurtazaev/tower-defense-ai-agent.git
+git clone <repository-url>
 cd tower-defense-ai-agent
 ```
 
-2. Create and activate a virtual environment:
+2. Create and activate virtual environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -97,69 +33,112 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Running the Game
+## Running the Game
 
+### Play the game manually:
 ```bash
 cd environment
 python td_pygame.py
 ```
 
-The game runs with optional sound support. If a `sounds/` folder is present in the root directory, sounds will play. Otherwise, the game runs silently.
+### Train an RL agent:
+```bash
+python train_q_learning.py --episodes 500 --max-steps 2500 --alpha 0.0005 --eps-decay 50000
+```
 
-## 📊 Game Statistics
+### Evaluate a trained agent:
+```bash
+python evaluate_q_agent.py --model-path trained_models/q_learning/q_agent_final.pkl --episodes 10
+```
 
-The HUD displays:
-- **Soldiers Alive**: Current active soldier count
-- **Soldiers Killed**: Total soldiers lost
-- **Soldiers Deployed**: Total soldiers placed
-- **Wights Killed**: Total wights eliminated
-- **Night Kings Defeated**: Progress (e.g., 3/5)
-- **Wall Integrity**: Base HP status
+### Visualize a trained agent:
+```bash
+python visualize_agent.py --model-path trained_models/q_learning/q_agent_final.pkl
+```
 
-## 🤖 Future Work: AI Agent Integration
+### View training progress with TensorBoard:
+```bash
+tensorboard --logdir=runs/q_learning --port=6006
+```
 
-This environment is designed to be integrated with AI agents. Planned implementations include:
-
-### ⚔️ Model-Based Planning
-
-- **A*** — calculates optimal enemy paths, identifying critical choke points (like the narrow breach in the castle walls).
-
-### 🐺 Model-Free Reinforcement Learning
-
-- **PPO** — the Jon Snow of RL: balanced, powerful, reliable
-- **A3C** — the Unsullied: trained in parallel, disciplined under pressure
-- **REINFORCE** — the simple but loyal Davos Seaworth of policy gradients
-
-### 🧙 Hybrid Approaches
-
-- **A*** guided policy pretraining
-- **A*** as a "tactical advisor" blended with learned behavior (AKA the Tyrion strategy)
-
-## 📁 Project Structure P.S Will keep updating :)
+## Project Structure
 
 ```
 tower-defense-ai-agent/
 ├── environment/
-│   └── td_pygame.py      # Main game engine (single-file implementation)
-├── sounds/               # Optional sound files (handled gracefully if absent)
-│   └── base.wav
-├── requirements.txt      # Python dependencies
-└── README.md            # This file
+│   ├── td_pyastar.py          # Main game engine
+│   ├── td_pygame.py           # Pygame visualization
+│   ├── td_warrior_gym_env.py # RL environment wrapper
+│   └── astar_controller.py   # A* pathfinding controller
+├── agents/
+│   └── approx_q_agent.py     # Q-Learning agent implementation
+├── train_q_learning.py        # Training script
+├── evaluate_q_agent.py        # Evaluation script
+├── visualize_agent.py          # Visualization script
+├── plot_training_curve.py     # Plot training statistics
+└── requirements.txt           # Python dependencies
 ```
 
-## 🎨 Technical Details
+## Game Mechanics
 
-- **Resolution**: 1280x800 pixels
-- **Frame Rate**: 60 FPS
-- **Enemy Paths**: 24 radial paths from the screen edge to Winterfell
-- **Night King Schedule**: 5 waves at 45s, 120s, 210s, 320s, and 480s
-- **Base HP**: 80 HP
-- **Max Soldiers**: 32 active soldiers
+- **Soldiers**: Deploy up to 4 soldiers that automatically attack nearby enemies
+- **Wights**: Regular enemies that spawn continuously
+- **Night Kings**: Boss enemies that spawn at 45s, 120s, 210s, 320s, and 480s
+- **Heroes**: Jon Snow and Daenerys deploy automatically to fight Night Kings
+- **Victory**: Survive 180 seconds or defeat all 5 Night Kings
 
-## 📝 License
+## Training Parameters
 
-This project is part of an academic course project.
+Recommended training settings:
+- `--episodes 500`: Number of training episodes
+- `--max-steps 2500`: Maximum steps per episode (allows full game time)
+- `--alpha 0.0005`: Learning rate
+- `--eps-decay 50000`: Epsilon decay steps
+- `--eps-end 0.1`: Final exploration rate
 
----
+## Contributing
 
-*"The Long Night is coming, but so is our AI."*
+### Pushing Code to Branch
+
+To push changes file by file to the `rl-warrior-implementation` branch:
+
+1. Check current branch:
+```bash
+git branch --show-current
+```
+
+2. Stage and commit files individually:
+```bash
+git add <file-path>
+git commit -m "Description of changes"
+git push origin rl-warrior-implementation
+```
+
+3. Example workflow:
+```bash
+# Add and commit environment file
+git add environment/td_warrior_gym_env.py
+git commit -m "Update RL environment with Night King integration"
+git push origin rl-warrior-implementation
+
+# Add and commit agent file
+git add agents/approx_q_agent.py
+git commit -m "Clean up agent code comments"
+git push origin rl-warrior-implementation
+
+# Add and commit training script
+git add train_q_learning.py
+git commit -m "Update training script"
+git push origin rl-warrior-implementation
+```
+
+4. Push all changes at once (alternative):
+```bash
+git add .
+git commit -m "Update project files"
+git push origin rl-warrior-implementation
+```
+
+## License
+
+Academic project for Intro to AI course.
