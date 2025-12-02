@@ -26,7 +26,7 @@ Place this file next to an optional `sounds/` folder (handled gracefully if abse
 """
 
 import pygame, sys, os, math, random, time, heapq
-from astar_controller import should_deploy_soldiers
+from .astar_controller import should_deploy_soldiers
 from collections import deque
 
 # -------------------------
