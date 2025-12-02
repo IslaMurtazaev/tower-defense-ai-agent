@@ -29,6 +29,8 @@ class ApproximateQAgent:
 
     def _epsilon(self) -> float:
         """Calculate current epsilon value using linear decay."""
+        # Epsilon controls exploration vs exploitation
+        # Starts high (explore) and decays to low (exploit)
         frac = min(1.0, self.step_count / float(self.epsilon_decay_steps))
         return float(self.epsilon_start + frac * (self.epsilon_end - self.epsilon_start))
 
@@ -44,14 +46,13 @@ class ApproximateQAgent:
         self.step_count += 1
         eps = self._epsilon()
 
+        # Epsilon-greedy: explore randomly or exploit best action
         if np.random.rand() < eps:
-            # Random action
             return self.action_space.sample()
 
-        # Greedy action: evaluate all actions and pick best
+        # Find best action by evaluating all grid positions
         best_q = -1e9
         best_action = None
-
         grid_size = int(self.action_space.nvec[0])
         for gx in range(grid_size):
             for gy in range(grid_size):
@@ -70,6 +71,7 @@ class ApproximateQAgent:
     # Q-value and features
     # -------------------------
     def _q_value(self, obs: dict, action: np.ndarray) -> float:
+        """Estimate Q-value using linear function approximation: Q(s,a) = w·f(s,a)"""
         feats = self._features(obs, action)
         return float(np.dot(self.weights, feats))
 
@@ -86,6 +88,7 @@ class ApproximateQAgent:
         gx_norm = gx / max(1, G - 1)
         gy_norm = gy / max(1, G - 1)
 
+        # Distance to base (helps agent place soldiers strategically)
         base_cells = np.argwhere(grid == 1)
         if base_cells.size > 0:
             byx = base_cells.mean(axis=0)
@@ -94,6 +97,8 @@ class ApproximateQAgent:
             dist_to_base_norm = dist_to_base / np.sqrt(2 * (G - 1) ** 2)
         else:
             dist_to_base_norm = 0.0
+
+        # Local soldier density (3x3 window) - avoid clustering
         x0, x1 = max(0, gx - 1), min(G, gx + 2)
         y0, y1 = max(0, gy - 1), min(G, gy + 2)
         local_patch = grid[y0:y1, x0:x1]
@@ -108,6 +113,7 @@ class ApproximateQAgent:
         is_on_base = 1.0 if cell_val == 1 else 0.0
         is_on_soldier = 1.0 if cell_val == 2 else 0.0
 
+        # Build feature vector: position, density, game state, placement flags
         feats = np.zeros(self.feature_dim, dtype=np.float32)
         i = 0
         if i < self.feature_dim:
@@ -116,12 +122,10 @@ class ApproximateQAgent:
             feats[i] = gy_norm; i += 1
         if i < self.feature_dim:
             feats[i] = dist_to_base_norm; i += 1
-        # Local / global soldier density
         if i < self.feature_dim:
             feats[i] = local_soldiers_norm; i += 1
         if i < self.feature_dim:
             feats[i] = total_soldiers_norm; i += 1
-        # Game state
         if i < self.feature_dim:
             feats[i] = soldiers_remaining / 10.0; i += 1
         if i < self.feature_dim:
@@ -135,18 +139,18 @@ class ApproximateQAgent:
         if i < self.feature_dim:
             feats[i] = is_on_soldier; i += 1
         if i < self.feature_dim:
-            feats[i] = 1.0; i += 1
+            feats[i] = 1.0; i += 1  # Bias term
 
         return feats
     def update(self, obs, action, reward, next_obs, done: bool):
         """Update Q-learning weights using TD error."""
         q_sa = self._q_value(obs, action)
 
-        # Target
+        # Compute target: r + gamma * max_a' Q(s', a') or just r if done
         if done:
             target = reward
         else:
-            # Max over next actions
+            # Find best next action (greedy policy for target)
             best_next_q = -1e9
             grid_size = int(self.action_space.nvec[0])
             for gx in range(grid_size):
@@ -157,6 +161,7 @@ class ApproximateQAgent:
                         best_next_q = q_next
             target = reward + self.gamma * best_next_q
 
+        # Q-learning update: w += alpha * (target - Q) * features
         td_error = target - q_sa
         feats = self._features(obs, action)
         self.weights += self.alpha * td_error * feats

@@ -137,7 +137,7 @@ class HeadlessWarriorGame:
         self.spawn_timer += dt
         self.current_wave = int(min(5, self.runtime // 45))
 
-        # Night King spawning logic
+        # Night King state machine: idle -> active -> cooldown -> idle
         def next_ns():
             for ns in self.nk_schedule:
                 if not ns['spawned']:
@@ -147,20 +147,21 @@ class HeadlessWarriorGame:
         ns = next_ns()
         if self.nk_state == "idle":
             if ns and self.runtime >= ns['spawn_time']:
-                # Spawn Night King
                 nk = game.NightKing(ns['path_key'], ns['spawn_frac'], ns['index'])
                 self.nks.append(nk)
                 ns['spawned'] = True
                 self.nk_state = "active"
                 self.current_nk = nk
+
+                # Increase wave pressure and spawn wight burst
                 wave_idx = min(ns['index'], len(game.WAVE_PRESSURE_FACTORS) - 1)
                 self.current_wave_pressure = game.WAVE_PRESSURE_FACTORS[wave_idx]
                 self.max_wave_pressure = max(self.max_wave_pressure, self.current_wave_pressure)
-                # Spawn burst of wights
                 burst = max(game.WAVE_BURST_BASE, int(math.ceil(game.WAVE_BURST_BASE * self.current_wave_pressure)))
                 for _ in range(burst):
                     self.spawn_wight()
-                # Deploy hero (Jon or Daenerys)
+
+                # Deploy hero: Jon for even NKs, Daenerys for odd
                 if ns['index'] % 2 == 0:
                     hero = game.Jon(math.atan2(nk.pos()[1] - BASE_POS[1], nk.pos()[0] - BASE_POS[0]))
                     hero.deploy_for(nk)
@@ -203,7 +204,7 @@ class HeadlessWarriorGame:
                 self.spawn_wight()
                 self.spawn_timer -= spawn_interval * passive_factor
 
-        # Update Night Kings
+        # Update Night Kings: movement, sweeps, hero deployment
         for nk in list(self.nks):
             if not nk.alive:
                 try:
@@ -213,7 +214,7 @@ class HeadlessWarriorGame:
                 continue
             res = nk.step(dt)
             if res == "sweep":
-                # Perform sweep: kill all soldiers within sweep radius
+                # NK sweep attack: instant kill all soldiers in radius
                 kx, ky = nk.pos()
                 for soldier in list(self.soldiers):
                     if math.hypot(soldier.x - kx, soldier.y - ky) <= game.NK_SWEEP_RADIUS:
@@ -233,7 +234,7 @@ class HeadlessWarriorGame:
                                     self.sound_engine.sounds["shock"].play()
                                 except Exception:
                                     pass
-            # Deploy hero if NK is locked for battle and hero not present
+            # Auto-deploy hero when NK engages (if not already deployed)
             if nk.locked_for_battle and nk.alive:
                 hero_present = any(
                     (isinstance(h, game.Jon) and h.active and h.target is nk) or
@@ -272,7 +273,7 @@ class HeadlessWarriorGame:
                             except Exception:
                                 pass
 
-        # Update soldiers (include NKs in target list)
+        # Update soldiers: they target both wights and Night Kings
         active_enemies = list(self.enemies) + list(self.nks)
         for soldier in list(self.soldiers):
             soldier.step(dt, active_enemies, self.burns, self.sound_engine, self.stats)
@@ -446,18 +447,19 @@ class TowerDefenseWarriorEnv(gym.Env):
 
             self.placement_actions_taken += 1
 
-            # If we've placed all soldiers (or reached max), start combat
+            # Start combat once all soldiers are placed
             if self.placement_actions_taken >= SOLDIER_MAX or len(self.game_state.soldiers) >= SOLDIER_MAX:
                 if len(self.game_state.soldiers) >= SOLDIER_MAX:
-                reward += 20.0
-            else:
-                reward -= 10.0
+                    reward += 20.0
+                else:
+                    reward -= 10.0
                 self.game_state.start_combat()
                 self.combat_running = True
 
-        # Combat phase - auto-run the game
+        # Combat phase: run game simulation and calculate step rewards
         if self.game_state.combat_phase:
             if self.fast_mode:
+                # Fast mode: simulate multiple frames per step for faster training
                 updates_per_step = 5
                 dt = 1.0 / 60.0
                 for _ in range(updates_per_step):
@@ -468,7 +470,6 @@ class TowerDefenseWarriorEnv(gym.Env):
                 dt = 1.0 / 60.0
                 self._simulate_combat_step(dt)
 
-            # Calculate rewards based on state changes
             reward += self._calculate_step_reward()
 
         # Check if game is over
@@ -492,9 +493,11 @@ class TowerDefenseWarriorEnv(gym.Env):
         """Calculate reward for a single combat step"""
         reward = 0.0
 
+        # Survival bonus: reward for staying alive each step
         if self.game_state.combat_phase:
             reward += 1.0
 
+        # Track kills and deaths (delta rewards)
         wights_killed_this_step = self.game_state.stats['wights_killed'] - self.last_wights_killed
         reward += wights_killed_this_step * 10.0
         self.last_wights_killed = self.game_state.stats['wights_killed']
@@ -507,6 +510,7 @@ class TowerDefenseWarriorEnv(gym.Env):
         reward -= soldiers_killed_this_step * 15.0
         self.last_soldiers_killed = self.game_state.stats['soldiers_killed']
 
+        # Base damage penalty
         base_damage_this_step = self.last_base_hp - self.game_state.base_hp
         reward -= base_damage_this_step * 5.0
         self.last_base_hp = self.game_state.base_hp
@@ -518,12 +522,14 @@ class TowerDefenseWarriorEnv(gym.Env):
         reward = 0.0
 
         if self.game_state.victory:
+            # Large victory bonus + bonuses for HP and survivors
             reward += 2000.0
             hp_ratio = self.game_state.base_hp / BASE_HP_MAX
             reward += hp_ratio * 500.0
             soldiers_alive = len(self.game_state.soldiers)
             reward += soldiers_alive * 100.0
         else:
+            # Defeat penalty, but partial credit for waves completed
             reward -= 500.0
             reward += self.game_state.current_wave * 50.0
 
@@ -547,15 +553,9 @@ class TowerDefenseWarriorEnv(gym.Env):
         }
 
     def _create_grid_observation(self) -> np.ndarray:
-        """
-        Create grid representation of game state.
-
-        Values:
-            0 = Empty
-            1 = Base
-            2 = Soldier
-            3 = Enemy/Wight
-            4 = Night King
+        """Create 32x32 grid representation of game state.
+        
+        Grid values: 0=empty, 1=base, 2=soldier, 3=wight, 4=Night King
         """
         grid = np.zeros((self.GRID_SIZE, self.GRID_SIZE), dtype=np.int32)
 
@@ -591,14 +591,13 @@ class TowerDefenseWarriorEnv(gym.Env):
                     if grid[grid_y, grid_x] == 0:
                         grid[grid_y, grid_x] = 3
 
-        # Add Night Kings
+        # Add Night Kings (override other entities)
         for nk in self.game_state.nks:
             if nk.alive:
                 nk_x, nk_y = nk.pos()
                 grid_x = int((nk_x / SCREEN_W) * self.GRID_SIZE)
                 grid_y = int((nk_y / SCREEN_H) * self.GRID_SIZE)
                 if 0 <= grid_x < self.GRID_SIZE and 0 <= grid_y < self.GRID_SIZE:
-                    # NKs override other entities in grid
                     grid[grid_y, grid_x] = 4
 
         return grid

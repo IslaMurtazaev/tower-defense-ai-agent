@@ -58,17 +58,20 @@ def train(args):
     episode_rewards = []
     episode_lengths = []
 
+    # Main training loop
     for ep in range(args.episodes):
         obs, _ = env.reset(seed=args.seed + ep)
         done = False
         ep_reward = 0.0
         ep_length = 0
 
+        # Run episode until done or max steps
         for _ in range(args.max_steps):
             action = agent.select_action(obs)
             next_obs, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
 
+            # Q-learning update
             agent.update(obs, action, reward, next_obs, done)
             ep_reward += reward
             ep_length += 1
@@ -80,14 +83,14 @@ def train(args):
         episode_rewards.append(ep_reward)
         episode_lengths.append(ep_length)
 
-        # Log to TensorBoard
+        # Log metrics to TensorBoard
         current_eps = agent.get_epsilon()
         writer.add_scalar("Episode/Reward", ep_reward, ep + 1)
         writer.add_scalar("Episode/Length", ep_length, ep + 1)
         writer.add_scalar("Training/Epsilon", current_eps, ep + 1)
         writer.add_scalar("Agent/Step_Count", agent.step_count, ep + 1)
 
-        # Calculate and log moving averages
+        # Moving averages for smoother visualization
         if len(episode_rewards) >= 10:
             recent_rewards = episode_rewards[-10:]
             writer.add_scalar("Episode/Reward_MA10", np.mean(recent_rewards), ep + 1)
@@ -104,7 +107,7 @@ def train(args):
                    f"Recent mean: {mean_r:.1f} ± {std_r:.1f} | Epsilon: {current_eps:.3f}")
             print(msg)
 
-        # Save checkpoint periodically
+        # Periodic checkpoints
         if args.save_interval > 0 and (ep + 1) % args.save_interval == 0:
             checkpoint_path = model_dir / f"q_agent_ep{ep+1}.pkl"
             agent.save(str(checkpoint_path))
