@@ -16,38 +16,50 @@ Defend Winterfell castle against waves of wights (undead enemies) by strategical
 
 ### Footman (Blue Circle)
 
-- **Role**: Mobile melee defender
+- **Role**: Mobile melee interceptor
+- **HP**: 150 (high durability tank)
 - **Attack Range**: 50 pixels (close combat)
 - **Damage**: 30 per attack
 - **Attack Speed**: 1.0 seconds
-- **Detection Radius**: 400 pixels
+- **Detection Radius**: 100 pixels (VERY SHORT - only engage very close threats)
 - **Movement Speed**: 60 pixels/second
-- **AI Behavior**: Uses A\* pathfinding to chase enemies, returns home when idle
-- **Best for**: Intercepting and eliminating threats with high damage
+- **Movement**: MOBILE - actively chases enemies within detection range
+- **AI Behavior**: Uses A\* pathfinding to chase nearby enemies, returns home when idle
+- **Strength**: Very high HP (can tank 10 wight attacks) for absorbing damage
+- **Weakness**: Very short detection range means they're purely defensive
+- **Best for**: Point defense, protecting static archers, absorbing damage
 
 ### Archer (Green Triangle)
 
-- **Role**: Mobile ranged attacker
-- **Attack Range**: 200 pixels (long range)
+- **Role**: Static long-range tower
+- **HP**: 60
+- **Attack Range**: 450 pixels (long range)
 - **Damage**: 10 per attack
 - **Attack Speed**: 0.8 seconds
-- **Detection Radius**: 450 pixels
-- **Movement Speed**: 50 pixels/second
-- **AI Behavior**: Uses A\* pathfinding to maintain range, returns home when idle
-- **Best for**: Supporting with sustained ranged fire
+- **Detection Radius**: 450 pixels (long range - matches attack)
+- **Movement Speed**: 0 (STATIC - does not move!)
+- **Movement**: STATIC - stays at placement position, acts like a tower
+- **AI Behavior**: Fires at enemies within range, never moves from position
+- **Strength**: Large coverage area (450px radius = ~35% of map width)
+- **Weakness**: Can't reposition, vulnerable if overrun
+- **Best for**: Area coverage, early engagement, covering spawn points
 
 ## Enemies
 
 ### Wights (Red Squares)
 
-- **HP**: 50
+- **HP**: 30 (weak individually, strong in numbers!)
 - **Speed**: 30 pixels/second
-- **Damage**: 20 to castle
-- **Behavior**: Move directly toward castle
-- **Waves**: 25, 40, 60, 75, 100 wights per wave (300 total)
-- **Spawn Rate**: 0.3 seconds between spawns (~3 per second)
-- **Difficulty**: High - each soldier must eliminate ~30 wights
-- **No delays**: Continuous waves for intense pressure
+- **Castle Damage**: 20 per hit
+- **Soldier Damage**: 15 per hit
+- **Attack Speed**: 1.5 seconds
+- **Detection Radius**: 100 pixels (for soldiers)
+- **Behavior**: Attack nearby soldiers, then move toward castle
+- **Waves**: 25, 40, 60, 75, 100 wights per wave (300 total!)
+- **Spawn Rate**: 0.05 seconds between spawns (BURST SPAWNING!)
+- **Wave Duration**: Entire wave spawns in 1-5 seconds
+- **Strategy**: Individual wights are fragile but waves spawn nearly instantly
+- **Challenge**: Must handle entire wave at once, not one-by-one
 
 ## Soldier AI System
 
@@ -119,12 +131,14 @@ python td_pygame.py
 
 ## Strategy Tips
 
-1. **Mix Your Forces**: Combine footmen and archers for balanced defense
-2. **Strategic Positioning**: Soldiers will chase enemies within detection radius then return home
-3. **Cover Approaches**: Wights spawn from top and sides - position soldiers to intercept multiple paths
-4. **Use Movement**: Soldiers now actively hunt enemies - place them where they can reach threats quickly
-5. **Detection Zones**: Footmen detect at 400px, archers at 450px - position accordingly
-6. **A\* Pathfinding**: Soldiers intelligently navigate to targets and back to their posts
+1. **Archers Are Towers**: Archers never move! 450px range means large coverage areas
+2. **Footmen Are Point Defense**: Footmen only engage very close enemies (100px)
+3. **Archer Placement Is Critical**: Since archers are static with 450px range, placement determines success
+4. **Overlapping Coverage**: Each archer covers ~35% of map width - position for overlap
+5. **Footmen Protect Archers**: Use footmen as bodyguards near archers to handle close threats
+6. **Avoid Clustering**: Wights gang up on grouped soldiers - spread your defenses
+7. **Early Engagement**: Archers can start shooting enemies from far away
+8. **Layered Defense**: Archers provide area coverage, footmen are last line of defense
 
 ## For RL Agent Training
 
@@ -166,13 +180,19 @@ env.close()
 
 ### Reward Structure
 
+**During Combat:**
 - **+10**: Per wight killed
-- **-50**: Per soldier lost
+- **-30**: Per soldier lost (NEW - significant penalty!)
 - **-5**: Per castle damage point
 - **-1**: Invalid soldier placement
+
+**Episode End:**
 - **+500**: Victory bonus
 - **-200**: Defeat penalty
 - **+50**: Per wave completed
+- **+100**: Per soldier alive at end (NEW - preservation bonus!)
+- **+2**: Per soldier HP remaining (NEW - health preservation!)
+- **+100**: Bonus for castle HP remaining
 
 ### Running Tests
 

@@ -147,22 +147,38 @@ class Soldier:
         
         # Stats based on type
         if soldier_type == SoldierType.FOOTMAN:
+            self.hp = 150
+            self.max_hp = 150
             self.attack_range = 50
             self.damage = 30
             self.attack_speed = 1.0  # seconds between attacks
-            self.detection_radius = 400  # How far they can see enemies
+            self.detection_radius = 100  # VERY SHORT range - only engage very close enemies
             self.move_speed = 60  # pixels per second
+            self.is_static = False  # Mobile unit
         else:  # ARCHER
-            self.attack_range = 200
+            self.hp = 60
+            self.max_hp = 60
+            self.attack_range = 450
             self.damage = 10
             self.attack_speed = 0.8
-            self.detection_radius = 450  # Archers have better vision
-            self.move_speed = 50  # Slightly slower
+            self.detection_radius = 450  # Long range - matches attack range
+            self.move_speed = 0  # STATIC - doesn't move
+            self.is_static = True  # Static unit
         
         # Movement state
         self.current_path: List[Position] = []
         self.current_target: Optional['Wight'] = None
         self.is_returning_home = False
+        self.path_update_timer = 0.0
+        self.path_update_interval = 0.3  # Recalculate path every 0.3 seconds
+        self.target_last_position: Optional[Position] = None
+    
+    def take_damage(self, damage: int):
+        """Take damage and check if dead"""
+        self.hp -= damage
+        if self.hp <= 0:
+            self.hp = 0
+            self.alive = False
     
     def can_attack(self, current_time: float) -> bool:
         """Check if enough time has passed to attack again"""
@@ -203,46 +219,76 @@ class Soldier:
         nearest_enemy = self.find_nearest_enemy(wights)
         
         if nearest_enemy:
-            self.is_returning_home = False
-            
-            # Check if we need a new path
-            if self.current_target != nearest_enemy or not self.current_path:
-                self.current_target = nearest_enemy
-                self.current_path = AStarPathfinder.find_path(self.position, nearest_enemy.position)
+            # Track current target
+            self.current_target = nearest_enemy
             
             # Check if in attack range
             distance_to_enemy = self.position.distance_to(nearest_enemy.position)
             
             if distance_to_enemy <= self.attack_range:
-                # Stop and attack
-                self.current_path = []
+                # In range - attack!
                 self.attack(nearest_enemy, current_time)
             else:
-                # Move towards enemy
-                if self.current_path:
-                    next_waypoint = self.current_path[0]
-                    move_distance = self.move_speed * dt
-                    self.position = self.position.move_towards(next_waypoint, move_distance)
-                    
-                    # Check if reached waypoint
-                    if self.position.distance_to(next_waypoint) < 5:
-                        self.current_path.pop(0)
+                # Not in range
+                if self.is_static:
+                    # ARCHERS: Static units don't move, just wait for enemies in range
+                    pass
                 else:
-                    # Move directly toward enemy
-                    move_distance = self.move_speed * dt
-                    self.position = self.position.move_towards(nearest_enemy.position, move_distance)
+                    # FOOTMEN: Mobile units move toward enemy
+                    self.is_returning_home = False
+                    self.path_update_timer += dt
+                    
+                    # Check if target moved significantly
+                    target_moved = False
+                    if self.target_last_position:
+                        distance_moved = self.target_last_position.distance_to(nearest_enemy.position)
+                        target_moved = distance_moved > 50  # Enemy moved more than 50 pixels
+                    
+                    # Check if we need a new path (fixed latency issue)
+                    needs_new_path = (
+                        not self.current_path or
+                        self.path_update_timer >= self.path_update_interval or  # Time-based update
+                        target_moved  # Distance-based update
+                    )
+                    
+                    if needs_new_path:
+                        self.current_path = AStarPathfinder.find_path(self.position, nearest_enemy.position)
+                        self.target_last_position = Position(nearest_enemy.position.x, nearest_enemy.position.y)
+                        self.path_update_timer = 0.0
+                    
+                    # Move towards enemy
+                    if self.current_path:
+                        next_waypoint = self.current_path[0]
+                        move_distance = self.move_speed * dt
+                        self.position = self.position.move_towards(next_waypoint, move_distance)
+                        
+                        # Check if reached waypoint
+                        if self.position.distance_to(next_waypoint) < 5:
+                            self.current_path.pop(0)
+                    else:
+                        # Move directly toward enemy
+                        move_distance = self.move_speed * dt
+                        self.position = self.position.move_towards(nearest_enemy.position, move_distance)
         else:
-            # No enemies - return to home position
+            # No enemies nearby
             self.current_target = None
-            self.current_path = []
             
-            distance_to_home = self.position.distance_to(self.home_position)
-            if distance_to_home > 5:
-                self.is_returning_home = True
-                move_distance = self.move_speed * dt
-                self.position = self.position.move_towards(self.home_position, move_distance)
-            else:
+            if self.is_static:
+                # ARCHERS: Static units stay at home position (don't need to return)
                 self.is_returning_home = False
+            else:
+                # FOOTMEN: Return to home position
+                self.current_path = []
+                self.target_last_position = None
+                self.path_update_timer = 0.0
+                
+                distance_to_home = self.position.distance_to(self.home_position)
+                if distance_to_home > 5:
+                    self.is_returning_home = True
+                    move_distance = self.move_speed * dt
+                    self.position = self.position.move_towards(self.home_position, move_distance)
+                else:
+                    self.is_returning_home = False
 
 
 class Wight:
@@ -251,11 +297,17 @@ class Wight:
     def __init__(self, spawn_position: Position, target_position: Position):
         self.position = spawn_position
         self.target = target_position
-        self.hp = 50
-        self.max_hp = 50
+        self.hp = 30
+        self.max_hp = 30
         self.speed = 30  # pixels per second
         self.damage = 20
+        self.castle_damage = 20  # Damage to castle
+        self.soldier_damage = 15  # Damage to soldiers
         self.alive = True
+        self.last_attack_time = 0.0
+        self.attack_speed = 1.5  # seconds between attacks
+        self.detection_radius = 100  # How far they can detect soldiers
+        self.current_soldier_target: Optional[Soldier] = None
     
     def take_damage(self, damage: int):
         """Take damage and check if dead"""
@@ -264,18 +316,64 @@ class Wight:
             self.hp = 0
             self.alive = False
     
-    def update(self, dt: float) -> bool:
-        """Move towards target. Returns True if reached target (castle)."""
+    def find_nearest_soldier(self, soldiers: List[Soldier]) -> Optional[Soldier]:
+        """Find nearest alive soldier within detection radius"""
+        nearest = None
+        min_dist = float('inf')
+        
+        for soldier in soldiers:
+            if soldier.alive:
+                dist = self.position.distance_to(soldier.position)
+                if dist <= self.detection_radius and dist < min_dist:
+                    min_dist = dist
+                    nearest = soldier
+        
+        return nearest
+    
+    def can_attack(self, current_time: float) -> bool:
+        """Check if enough time has passed to attack again"""
+        return current_time - self.last_attack_time >= self.attack_speed
+    
+    def attack_soldier(self, soldier: Soldier, current_time: float) -> bool:
+        """Attack soldier if ready. Returns True if attack happened."""
+        if not self.alive or not soldier.alive:
+            return False
+        
+        if self.can_attack(current_time):
+            soldier.take_damage(self.soldier_damage)
+            self.last_attack_time = current_time
+            return True
+        return False
+    
+    def update(self, dt: float, current_time: float, soldiers: List[Soldier]) -> bool:
+        """Move towards target or engage soldiers. Returns True if reached castle."""
         if not self.alive:
             return False
         
-        # Move towards castle
-        move_distance = self.speed * dt
-        self.position = self.position.move_towards(self.target, move_distance)
+        # Find nearest soldier
+        nearest_soldier = self.find_nearest_soldier(soldiers)
         
-        # Check if reached castle (within 20 pixels)
-        if self.position.distance_to(self.target) < 20:
-            return True
+        if nearest_soldier:
+            # Engage soldier
+            self.current_soldier_target = nearest_soldier
+            distance_to_soldier = self.position.distance_to(nearest_soldier.position)
+            
+            if distance_to_soldier <= 30:  # Melee range
+                # Stop and attack
+                self.attack_soldier(nearest_soldier, current_time)
+            else:
+                # Move towards soldier
+                move_distance = self.speed * dt
+                self.position = self.position.move_towards(nearest_soldier.position, move_distance)
+        else:
+            # No soldiers nearby - move towards castle
+            self.current_soldier_target = None
+            move_distance = self.speed * dt
+            self.position = self.position.move_towards(self.target, move_distance)
+            
+            # Check if reached castle (within 20 pixels)
+            if self.position.distance_to(self.target) < 20:
+                return True
         
         return False
 
@@ -326,7 +424,7 @@ class TowerDefenseGame:
         self.current_wave = 0
         self.wave_spawn_timer = 0.0
         self.wights_to_spawn_this_wave = 0
-        self.spawn_interval = 0.3  # seconds between spawns (faster: was 1.0)
+        self.spawn_interval = 0.05  # seconds between spawns - VERY FAST (burst spawning!)
         self.time_since_last_spawn = 0.0
         self.waiting_for_next_wave = False
         self.next_wave_timer = 0.0
@@ -429,31 +527,38 @@ class TowerDefenseGame:
                     else:
                         self._start_wave(self.current_wave)
         
-        # Update wights
+        # Update soldiers first (they now move and attack)
+        alive_wights = [w for w in self.wights if w.alive]
+        for soldier in self.soldiers:
+            if soldier.alive:
+                soldier.update(dt, self.game_time, alive_wights)
+        
+        # Update wights (they can now attack soldiers)
+        alive_soldiers = [s for s in self.soldiers if s.alive]
         for wight in self.wights:
             if wight.alive:
-                reached_castle = wight.update(dt)
+                reached_castle = wight.update(dt, self.game_time, alive_soldiers)
                 if reached_castle:
-                    self.castle.take_damage(wight.damage)
-                    self.stats['castle_damage_taken'] += wight.damage
+                    self.castle.take_damage(wight.castle_damage)
+                    self.stats['castle_damage_taken'] += wight.castle_damage
                     wight.alive = False
                     
                     if self.castle.is_destroyed():
                         self.phase = GamePhase.DEFEAT
                         return
         
-        # Update soldiers (they now move and attack)
-        alive_wights = [w for w in self.wights if w.alive]
-        for soldier in self.soldiers:
-            if soldier.alive:
-                soldier.update(dt, self.game_time, alive_wights)
-        
-        # Check for killed wights
-        current_alive = sum(1 for w in self.wights if w.alive)
+        # Check for killed wights and soldiers
+        current_alive_wights = sum(1 for w in self.wights if w.alive)
         total_wights = len(self.wights)
-        expected_alive = total_wights - self.stats['wights_killed']
-        if current_alive < expected_alive:
-            self.stats['wights_killed'] = total_wights - current_alive
+        expected_alive_wights = total_wights - self.stats['wights_killed']
+        if current_alive_wights < expected_alive_wights:
+            self.stats['wights_killed'] = total_wights - current_alive_wights
+        
+        current_alive_soldiers = sum(1 for s in self.soldiers if s.alive)
+        total_soldiers = len(self.soldiers)
+        expected_alive_soldiers = total_soldiers - self.stats['soldiers_killed']
+        if current_alive_soldiers < expected_alive_soldiers:
+            self.stats['soldiers_killed'] = total_soldiers - current_alive_soldiers
     
     def reset(self):
         """Reset game to initial state"""
@@ -466,7 +571,7 @@ class TowerDefenseGame:
             'game_time': self.game_time,
             'castle_hp': self.castle.hp,
             'castle_max_hp': self.castle.max_hp,
-            'soldiers': [(s.type, s.position.x, s.position.y, s.alive) for s in self.soldiers],
+            'soldiers': [(s.type, s.position.x, s.position.y, s.alive, s.hp) for s in self.soldiers],
             'wights': [(w.position.x, w.position.y, w.alive, w.hp) for w in self.wights],
             'current_wave': self.current_wave,
             'total_waves': len(self.WAVE_DEFINITIONS),

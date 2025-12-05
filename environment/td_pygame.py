@@ -255,6 +255,29 @@ class TowerDefenseVisualization:
                     pygame.draw.polygon(self.screen, self.COLOR_ARCHER, points)
                     pygame.draw.polygon(self.screen, self.COLOR_TEXT, points, 2)
                 
+                # Draw HP bar above soldier (during combat or if damaged)
+                if self.game.phase == GamePhase.COMBAT or soldier.hp < soldier.max_hp:
+                    hp_bar_width = 30
+                    hp_bar_height = 4
+                    hp_bar_x = pos.x - hp_bar_width // 2
+                    hp_bar_y = pos.y - 25
+                    
+                    # Background
+                    pygame.draw.rect(self.screen, self.COLOR_HP_BAR_BG,
+                                   (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
+                    
+                    # HP bar (color based on HP percentage)
+                    hp_ratio = soldier.hp / soldier.max_hp
+                    if hp_ratio > 0.6:
+                        hp_color = (0, 200, 0)  # Green
+                    elif hp_ratio > 0.3:
+                        hp_color = (255, 165, 0)  # Orange
+                    else:
+                        hp_color = (255, 50, 50)  # Red
+                    
+                    pygame.draw.rect(self.screen, hp_color,
+                                   (hp_bar_x, hp_bar_y, int(hp_bar_width * hp_ratio), hp_bar_height))
+                
                 # Draw attack range circle (faint) when in combat
                 if self.game.phase == GamePhase.COMBAT and soldier.current_target:
                     pygame.draw.circle(self.screen, (200, 200, 100),

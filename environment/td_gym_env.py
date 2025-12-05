@@ -183,19 +183,14 @@ class TowerDefenseEnv(gym.Env):
         reward = 0.0
         stats = self.game.stats
         
-        # Survival reward - reward for staying alive each step during combat
-        # Encourages longer survival and defensive strategies
-        if self.game.phase == GamePhase.COMBAT:
-            reward += 0.5  # +0.5 per combat step survived
-        
-        # Track wights killed (for stats, but no reward)
+        # Reward for killing wights
         wights_killed_this_step = stats['wights_killed'] - self.last_wights_killed
+        reward += wights_killed_this_step * 10.0  # +10 per wight killed
         self.last_wights_killed = stats['wights_killed']
-        # NOTE: Removed kill reward - focus is on castle protection
         
-        # Penalty for losing soldiers (currently no soldier death mechanic, but keeping for future)
+        # SIGNIFICANT penalty for losing soldiers (new mechanic!)
         soldiers_killed_this_step = stats['soldiers_killed'] - self.last_soldiers_killed
-        reward -= soldiers_killed_this_step * 50.0
+        reward -= soldiers_killed_this_step * 30.0  # -30 per soldier lost
         self.last_soldiers_killed = stats['soldiers_killed']
         
         # Penalty for castle taking damage (INCREASED from -5 to -10)
@@ -215,11 +210,15 @@ class TowerDefenseEnv(gym.Env):
             
             # Bonus for castle HP remaining
             hp_ratio = self.game.castle.hp / self.game.castle.max_hp
-            reward += hp_ratio * 200.0
+            reward += hp_ratio * 100.0
             
-            # Bonus for soldiers surviving (if applicable)
+            # MAJOR bonus for soldiers surviving (preservation reward)
             soldiers_alive = sum(1 for s in self.game.soldiers if s.alive)
-            reward += soldiers_alive * 10.0
+            reward += soldiers_alive * 100.0  # +100 per soldier alive at end
+            
+            # Additional bonus for soldier HP remaining (health preservation)
+            total_soldier_hp = sum(s.hp for s in self.game.soldiers if s.alive)
+            reward += total_soldier_hp * 2.0  # +2 per HP point
         else:
             # Defeat penalty
             reward -= 200.0

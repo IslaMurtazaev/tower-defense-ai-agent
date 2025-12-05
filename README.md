@@ -31,19 +31,21 @@ python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 
 ## ✨ Key Features
 
-### Intelligent Soldier AI
-- **A* Pathfinding**: Soldiers navigate intelligently to enemies
-- **Detection Radius**: 400px (footmen), 450px (archers)
-- **Dynamic Behavior**: Chase enemies, return home when idle
+### Tactical Unit System
+- **A* Pathfinding**: Footmen use intelligent pathfinding to intercept
+- **Dual Unit Roles**: Mobile defenders + Static towers
+- **Mortal Units**: Soldiers can take damage and die
 - **Two Unit Types**:
-  - **Footmen**: Melee (50px range, 30 damage)
-  - **Archers**: Ranged (200px range, 10 damage)
+  - **Footmen**: Mobile tanks (150 HP, 100px detection, 50px range, 30 damage)
+  - **Archers**: Static towers (60 HP, 450px detection, 450px range, 10 damage, DON'T MOVE)
 
 ### Challenging Combat
 - **300 total enemies** across 5 waves (25, 40, 60, 75, 100)
-- **Fast spawning**: 0.3s intervals (~3 per second)
-- **No delays**: Continuous wave progression
-- **10 soldiers** to defend with
+- **BURST spawning**: 0.05s intervals (waves spawn nearly instantly!)
+- **Wave-based pressure**: Handle 25-100 enemies at once, not gradually
+- **10 soldiers** to defend with - and they can die!
+- **Wights attack soldiers**: Enemies engage defenders before castle
+- **Horde tactics**: Individual wights are weak (30 HP) but waves are overwhelming
 
 ### RL Training System
 - **Algorithm**: PPO (Proximal Policy Optimization)
@@ -140,10 +142,12 @@ tower_defense/
 ## 🎓 What the AI Learns
 
 Through training, agents discover:
-1. **Coverage**: Spread soldiers across spawn points
-2. **Composition**: Balance footmen and archers (40-60% mix)
-3. **Positioning**: Place near enemy spawns for early intercept
-4. **Detection Zones**: Create overlapping coverage areas
+1. **Archer Placement**: Where to position static archers for maximum coverage
+2. **Footmen Positioning**: Where mobile interceptors should patrol from
+3. **Unit Composition**: How many mobile vs static units to deploy
+4. **Coverage Zones**: Overlapping archer ranges to cover spawn points
+5. **Resource Preservation**: Avoid losing soldiers early (they're mortal!)
+6. **Tactical Depth**: Static towers for area denial, mobile units for interception
 
 ## 🛠️ Common Commands
 
@@ -224,6 +228,7 @@ spawn_interval = 0.3        # Spawn speed
 
 **During Combat:**
 - +10 per wight killed
+- -30 per soldier lost (NEW!)
 - -5 per castle damage point
 - -1 for invalid placement
 
@@ -231,7 +236,9 @@ spawn_interval = 0.3        # Spawn speed
 - +500 for victory
 - -200 for defeat
 - +50 per wave completed
-- Bonus for remaining HP
+- +100 per soldier alive (NEW!)
+- +2 per soldier HP remaining (NEW!)
+- +100 for castle HP remaining
 
 ## 👥 Credits
 
