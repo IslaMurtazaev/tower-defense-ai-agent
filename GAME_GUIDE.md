@@ -16,50 +16,50 @@ Defend Winterfell castle against waves of wights (undead enemies) by strategical
 
 ### Footman (Blue Circle)
 
-- **Role**: Mobile melee interceptor
-- **HP**: 150 (high durability tank)
+- **Role**: Mobile melee interceptor/tank
+- **HP**: 200 (very high durability)
 - **Attack Range**: 50 pixels (close combat)
-- **Damage**: 30 per attack
-- **Attack Speed**: 1.0 seconds
-- **Detection Radius**: 100 pixels (VERY SHORT - only engage very close threats)
+- **Damage**: 30 per attack (ONE-SHOT wights)
+- **Attack Speed**: 0.7 seconds (FAST attacks)
+- **Detection Radius**: 100 pixels (SHORT - only engage close threats)
 - **Movement Speed**: 60 pixels/second
 - **Movement**: MOBILE - actively chases enemies within detection range
 - **AI Behavior**: Uses A\* pathfinding to chase nearby enemies, returns home when idle
-- **Strength**: Very high HP (can tank 10 wight attacks) for absorbing damage
-- **Weakness**: Very short detection range means they're purely defensive
-- **Best for**: Point defense, protecting static archers, absorbing damage
+- **Strength**: Very durable (13 wight attacks) and fast killing (1.43/second)
+- **Weakness**: Short detection range - purely close-range defense
+- **Best for**: Intercepting close enemies, protecting archers, cleanup
 
 ### Archer (Green Triangle)
 
-- **Role**: Static long-range tower
+- **Role**: Static long-range support DPS
 - **HP**: 60
 - **Attack Range**: 450 pixels (long range)
-- **Damage**: 10 per attack
+- **Damage**: 6 per attack (support damage - weakens enemies)
 - **Attack Speed**: 0.8 seconds
 - **Detection Radius**: 450 pixels (long range - matches attack)
 - **Movement Speed**: 0 (STATIC - does not move!)
 - **Movement**: STATIC - stays at placement position, acts like a tower
 - **AI Behavior**: Fires at enemies within range, never moves from position
-- **Strength**: Large coverage area (450px radius = ~35% of map width)
-- **Weakness**: Can't reposition, vulnerable if overrun
-- **Best for**: Area coverage, early engagement, covering spawn points
+- **Strength**: Large coverage area, weakens horde from distance
+- **Weakness**: Low damage (5 shots to kill), can't handle waves alone
+- **Best for**: Softening waves, support DPS, NOT primary killers
 
 ## Enemies
 
 ### Wights (Red Squares)
 
 - **HP**: 30 (weak individually, strong in numbers!)
-- **Speed**: 30 pixels/second
-- **Castle Damage**: 20 per hit
-- **Soldier Damage**: 15 per hit
+- **Speed**: 50 pixels/second (FAST!)
+- **Castle Damage**: 10 per hit
+- **Soldier Damage**: 10 per hit
 - **Attack Speed**: 1.5 seconds
 - **Detection Radius**: 100 pixels (for soldiers)
-- **Behavior**: Attack nearby soldiers, then move toward castle
+- **Behavior**: Attack nearby soldiers, then rush toward castle
 - **Waves**: 25, 40, 60, 75, 100 wights per wave (300 total!)
 - **Spawn Rate**: 0.05 seconds between spawns (BURST SPAWNING!)
 - **Wave Duration**: Entire wave spawns in 1-5 seconds
-- **Strategy**: Individual wights are fragile but waves spawn nearly instantly
-- **Challenge**: Must handle entire wave at once, not one-by-one
+- **Strategy**: Fast, numerous, and spawn in massive bursts
+- **Challenge**: Speed + numbers = overwhelming pressure!
 
 ## Soldier AI System
 

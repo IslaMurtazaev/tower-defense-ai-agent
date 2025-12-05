@@ -33,11 +33,11 @@ python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 
 ### Tactical Unit System
 - **A* Pathfinding**: Footmen use intelligent pathfinding to intercept
-- **Dual Unit Roles**: Mobile defenders + Static towers
+- **Forced Synergy**: MUST use both unit types to win
 - **Mortal Units**: Soldiers can take damage and die
 - **Two Unit Types**:
-  - **Footmen**: Mobile tanks (150 HP, 100px detection, 50px range, 30 damage)
-  - **Archers**: Static towers (60 HP, 450px detection, 450px range, 10 damage, DON'T MOVE)
+  - **Footmen**: Mobile tanks (200 HP, 100px detection, 50px range, 30 damage, 0.7s attacks)
+  - **Archers**: Static support (60 HP, 450px detection, 450px range, 6 damage, 0.8s attacks)
 
 ### Challenging Combat
 - **300 total enemies** across 5 waves (25, 40, 60, 75, 100)

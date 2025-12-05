@@ -23,7 +23,8 @@ Implemented a major gameplay update that makes soldiers mortal and introduces ta
 
 - **HP**: 30 (weak individually - footmen one-shot them!)
 - **Detection Radius**: 100 pixels for soldiers
-- **Soldier Damage**: 15 per hit
+- **Soldier Damage**: 10 per hit
+- **Castle Damage**: 10 per hit
 - **Attack Speed**: 1.5 seconds
 - **Behavior**: Stop and attack soldier if within 100px, otherwise advance to castle
 - **Melee Range**: 30 pixels to engage in combat

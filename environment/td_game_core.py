@@ -147,21 +147,21 @@ class Soldier:
         
         # Stats based on type
         if soldier_type == SoldierType.FOOTMAN:
-            self.hp = 150
-            self.max_hp = 150
-            self.attack_range = 50
+            self.hp = 200
+            self.max_hp = 200
+            self.attack_range = 30
             self.damage = 30
-            self.attack_speed = 1.0  # seconds between attacks
+            self.attack_speed = 0.5  # seconds between attacks (FASTER - was 1.0)
             self.detection_radius = 100  # VERY SHORT range - only engage very close enemies
-            self.move_speed = 60  # pixels per second
+            self.move_speed = 50  # pixels per second
             self.is_static = False  # Mobile unit
         else:  # ARCHER
-            self.hp = 60
-            self.max_hp = 60
-            self.attack_range = 450
+            self.hp = 50
+            self.max_hp = 50
+            self.attack_range = 400
             self.damage = 10
-            self.attack_speed = 0.8
-            self.detection_radius = 450  # Long range - matches attack range
+            self.attack_speed = 0.9
+            self.detection_radius = 400  # Long range - matches attack range
             self.move_speed = 0  # STATIC - doesn't move
             self.is_static = True  # Static unit
         
@@ -299,10 +299,9 @@ class Wight:
         self.target = target_position
         self.hp = 30
         self.max_hp = 30
-        self.speed = 30  # pixels per second
-        self.damage = 20
-        self.castle_damage = 20  # Damage to castle
-        self.soldier_damage = 15  # Damage to soldiers
+        self.speed = 50  # pixels per second - FASTER (was 30)
+        self.castle_damage = 10  # Damage to castle
+        self.soldier_damage = 10  # Damage to soldiers
         self.alive = True
         self.last_attack_time = 0.0
         self.attack_speed = 1.5  # seconds between attacks
