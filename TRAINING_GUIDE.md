@@ -39,6 +39,7 @@ This installs:
 **⚠️ Troubleshooting Dependencies:**
 
 If you get `ImportError: You must install tqdm and rich`:
+
 ```bash
 # Option 1: Install missing packages
 pip install tqdm rich
@@ -52,6 +53,7 @@ pip install -r requirements.txt
 ```
 
 Verify installation:
+
 ```bash
 python -c "import tqdm; import rich; print('✓ Success!')"
 ```
@@ -236,13 +238,13 @@ The agent learns from these rewards:
 ### Episode Structure
 
 1. **Placement Phase** (10 actions)
-   - Agent places all 10 soldiers
+   - Agent places all 20 soldiers
    - Invalid placements penalized (-1 reward)
 2. **Combat Phase** (auto-run)
    - Game simulates until natural completion
    - Agent receives rewards based on performance
 3. **Episode End** (Victory or Defeat only)
-   - Victory: All 5 waves defeated
+   - Victory: All 400 wights defeated
    - Defeat: Castle destroyed
    - Final reward calculated
    - Environment resets for next episode

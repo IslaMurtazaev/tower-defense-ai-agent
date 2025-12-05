@@ -9,7 +9,7 @@ Defend Winterfell castle against waves of wights (undead enemies) by strategical
 ### Game Flow
 
 1. **Placement Phase**: Place up to 20 soldiers (any combination of footmen and archers)
-2. **Combat Phase**: Watch your soldiers automatically defend against 5 waves of wights
+2. **Combat Phase**: Watch your soldiers automatically defend against 400 wights
 3. **Victory/Defeat**: Survive all waves or lose when castle HP reaches 0
 
 ## Soldier Types
@@ -17,49 +17,49 @@ Defend Winterfell castle against waves of wights (undead enemies) by strategical
 ### Footman (Blue Circle)
 
 - **Role**: Mobile melee interceptor/tank
-- **HP**: 200 (very high durability)
-- **Attack Range**: 50 pixels (close combat)
-- **Damage**: 30 per attack (ONE-SHOT wights)
-- **Attack Speed**: 0.7 seconds (FAST attacks)
+- **HP**: 800 (super durable!)
+- **Attack Range**: 20 pixels (very close combat)
+- **Attack Speed**: 1.0 seconds
+- **Kill Rate**: 1.0 wights/second (instant kill on hit)
 - **Detection Radius**: 100 pixels (SHORT - only engage close threats)
-- **Movement Speed**: 60 pixels/second
+- **Movement Speed**: 50 pixels/second
 - **Movement**: MOBILE - actively chases enemies within detection range
 - **AI Behavior**: Uses A\* pathfinding to chase nearby enemies, returns home when idle
-- **Strength**: Very durable (13 wight attacks) and fast killing (1.43/second)
+- **Strength**: Super durable (200 wight attacks!) and instant kills
 - **Weakness**: Short detection range - purely close-range defense
-- **Best for**: Intercepting close enemies, protecting archers, cleanup
+- **Best for**: Intercepting close enemies, protecting archers, tanking damage
 
 ### Archer (Green Triangle)
 
-- **Role**: Static long-range support DPS
-- **HP**: 60
-- **Attack Range**: 450 pixels (long range)
-- **Damage**: 6 per attack (support damage - weakens enemies)
-- **Attack Speed**: 0.8 seconds
-- **Detection Radius**: 450 pixels (long range - matches attack)
+- **Role**: Static long-range tower
+- **HP**: 50
+- **Attack Range**: 300 pixels (medium range)
+- **Attack Speed**: 0.7 seconds (FAST!)
+- **Kill Rate**: 1.43 wights/second (instant kill on hit)
+- **Detection Radius**: 300 pixels (medium range - matches attack)
 - **Movement Speed**: 0 (STATIC - does not move!)
 - **Movement**: STATIC - stays at placement position, acts like a tower
 - **AI Behavior**: Fires at enemies within range, never moves from position
-- **Strength**: Large coverage area, weakens horde from distance
-- **Weakness**: Low damage (5 shots to kill), can't handle waves alone
-- **Best for**: Softening waves, support DPS, NOT primary killers
+- **Strength**: Fast firing rate (0.7s), instant kills, good coverage (300px)
+- **Weakness**: Fragile (12.5 wight attacks), medium range requires good positioning
+- **Best for**: High DPS, area coverage, primary killing power
 
 ## Enemies
 
 ### Wights (Red Squares)
 
-- **HP**: 30 (weak individually, strong in numbers!)
+- **Durability**: Instant-kill (no HP - killed in one hit by any soldier!)
 - **Speed**: 50 pixels/second (FAST!)
-- **Castle Damage**: 10 per hit
-- **Soldier Damage**: 10 per hit
-- **Attack Speed**: 1.5 seconds
+- **Castle Damage**: 10 per hit (10 hits to destroy castle)
+- **Soldier Damage**: 4 per hit
+- **Attack Speed**: 2.0 seconds
 - **Detection Radius**: 100 pixels (for soldiers)
 - **Behavior**: Attack nearby soldiers, then rush toward castle
-- **Waves**: 25, 40, 60, 75, 100 wights per wave (300 total!)
-- **Spawn Rate**: 0.05 seconds between spawns (BURST SPAWNING!)
-- **Wave Duration**: Entire wave spawns in 1-5 seconds
-- **Strategy**: Fast, numerous, and spawn in massive bursts
-- **Challenge**: Speed + numbers = overwhelming pressure!
+- **Total Count**: 400 wights in a single massive wave
+- **Spawn Rate**: 0.05 seconds between spawns (20 wights/second!)
+- **Spawn Duration**: All 400 spawn in 20 seconds
+- **Strategy**: Extremely fragile but overwhelming in numbers
+- **Challenge**: Pure horde defense - 400 fast enemies in one unstoppable wave!
 
 ## Soldier AI System
 
@@ -181,12 +181,14 @@ env.close()
 ### Reward Structure
 
 **During Combat:**
+
 - **+10**: Per wight killed
 - **-30**: Per soldier lost (NEW - significant penalty!)
 - **-5**: Per castle damage point
 - **-1**: Invalid soldier placement
 
 **Episode End:**
+
 - **+500**: Victory bonus
 - **-200**: Defeat penalty
 - **+50**: Per wave completed
@@ -204,7 +206,7 @@ python test_game.py
 
 - **Castle HP**: 100
 - **Max Soldiers**: 10
-- **Total Enemies**: 300 wights across 5 waves (25, 40, 60, 75, 100)
+- **Total Enemies**: 400 wights in 1 wave
 - **Spawn Rate**: 0.3 seconds (3+ wights per second!)
 - **Waves**: Continuous, no delay between waves
 - **Map Size**: 1280x800 pixels

@@ -147,21 +147,19 @@ class Soldier:
         
         # Stats based on type
         if soldier_type == SoldierType.FOOTMAN:
-            self.hp = 250
-            self.max_hp = 250
-            self.attack_range = 30
-            self.damage = 30
-            self.attack_speed = 0.5  # seconds between attacks (FASTER - was 1.0)
+            self.hp = 500
+            self.max_hp = 500
+            self.attack_range = 20
+            self.attack_speed = 1  # seconds between attacks
             self.detection_radius = 100  # VERY SHORT range - only engage very close enemies
             self.move_speed = 50  # pixels per second
             self.is_static = False  # Mobile unit
         else:  # ARCHER
             self.hp = 50
             self.max_hp = 50
-            self.attack_range = 400
-            self.damage = 15
-            self.attack_speed = 0.9
-            self.detection_radius = 400  # Long range - matches attack range
+            self.attack_range = 300
+            self.attack_speed = 0.7
+            self.detection_radius = 300  # Long range - matches attack range
             self.move_speed = 0  # STATIC - doesn't move
             self.is_static = True  # Static unit
         
@@ -191,7 +189,7 @@ class Soldier:
         
         if self.position.distance_to(target.position) <= self.attack_range:
             if self.can_attack(current_time):
-                target.take_damage(self.damage)
+                target.alive = False  # Instant kill
                 self.last_attack_time = current_time
                 return True
         return False
@@ -297,23 +295,14 @@ class Wight:
     def __init__(self, spawn_position: Position, target_position: Position):
         self.position = spawn_position
         self.target = target_position
-        self.hp = 30
-        self.max_hp = 30
         self.speed = 50  # pixels per second - FASTER (was 30)
         self.castle_damage = 10  # Damage to castle
-        self.soldier_damage = 10  # Damage to soldiers
+        self.soldier_damage = 4  # Damage to soldiers
         self.alive = True
         self.last_attack_time = 0.0
-        self.attack_speed = 1.5  # seconds between attacks
+        self.attack_speed = 2  # seconds between attacks
         self.detection_radius = 100  # How far they can detect soldiers
         self.current_soldier_target: Optional[Soldier] = None
-    
-    def take_damage(self, damage: int):
-        """Take damage and check if dead"""
-        self.hp -= damage
-        if self.hp <= 0:
-            self.hp = 0
-            self.alive = False
     
     def find_nearest_soldier(self, soldiers: List[Soldier]) -> Optional[Soldier]:
         """Find nearest alive soldier within detection radius"""
@@ -403,9 +392,9 @@ class TowerDefenseGame:
     HEIGHT = 800
     
     # Game constants
-    MAX_SOLDIERS = 10
-    WAVE_DEFINITIONS = [25, 40, 60, 75, 100]  # Number of wights per wave (5x multiplier)
-    TIME_BETWEEN_WAVES = 0.0  # seconds
+    MAX_SOLDIERS = 20
+    WAVE_DEFINITIONS = [400]  # Single wave - all 400 wights at once!
+    TIME_BETWEEN_WAVES = 0.0  # seconds (not used with single wave)
     
     def __init__(self, speed_multiplier: float = 1.0):
         # Game settings
@@ -426,7 +415,7 @@ class TowerDefenseGame:
         self.current_wave = 0
         self.wave_spawn_timer = 0.0
         self.wights_to_spawn_this_wave = 0
-        self.spawn_interval = 0.05  # seconds between spawns - VERY FAST (burst spawning!)
+        self.spawn_interval = 0.01  # seconds between spawns - VERY FAST (burst spawning!)
         self.time_since_last_spawn = 0.0
         self.waiting_for_next_wave = False
         self.next_wave_timer = 0.0
@@ -587,7 +576,7 @@ class TowerDefenseGame:
             'castle_hp': self.castle.hp,
             'castle_max_hp': self.castle.max_hp,
             'soldiers': [(s.type, s.position.x, s.position.y, s.alive, s.hp) for s in self.soldiers],
-            'wights': [(w.position.x, w.position.y, w.alive, w.hp) for w in self.wights],
+            'wights': [(w.position.x, w.position.y, w.alive) for w in self.wights],
             'current_wave': self.current_wave,
             'total_waves': len(self.WAVE_DEFINITIONS),
             'stats': self.stats.copy(),

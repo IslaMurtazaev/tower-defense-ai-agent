@@ -297,19 +297,7 @@ class TowerDefenseVisualization:
                 rect = pygame.Rect(int(pos.x - size // 2), int(pos.y - size // 2), size, size)
                 pygame.draw.rect(self.screen, self.COLOR_WIGHT, rect)
                 pygame.draw.rect(self.screen, self.COLOR_TEXT, rect, 2)
-                
-                # Draw HP bar above wight
-                hp_bar_width = 20
-                hp_bar_height = 3
-                hp_bar_x = pos.x - hp_bar_width // 2
-                hp_bar_y = pos.y - 20
-                
-                pygame.draw.rect(self.screen, self.COLOR_HP_BAR_BG,
-                               (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
-                
-                hp_ratio = wight.hp / wight.max_hp
-                pygame.draw.rect(self.screen, self.COLOR_HP_BAR,
-                               (hp_bar_x, hp_bar_y, int(hp_bar_width * hp_ratio), hp_bar_height))
+                # No HP bar needed - wights are instant-kill enemies
     
     def _draw_placement_ui(self):
         """Draw placement phase UI"""

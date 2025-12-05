@@ -425,25 +425,13 @@ class TowerDefenseEnv(gym.Env):
                 rect = pygame.Rect(int(pos.x - size // 2), int(pos.y - size // 2), size, size)
                 pygame.draw.rect(self.screen, COLOR_WIGHT, rect)
                 pygame.draw.rect(self.screen, COLOR_TEXT, rect, 2)
-                
-                # Wight HP bar
-                hp_bar_width = 20
-                hp_bar_height = 3
-                hp_bar_x = pos.x - hp_bar_width // 2
-                hp_bar_y = pos.y - 20
-                
-                pygame.draw.rect(self.screen, COLOR_HP_BAR_BG,
-                               (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
-                
-                wight_hp_ratio = wight.hp / wight.max_hp
-                pygame.draw.rect(self.screen, COLOR_HP_BAR,
-                               (hp_bar_x, hp_bar_y, int(hp_bar_width * wight_hp_ratio), hp_bar_height))
+                # No HP bar needed - wights are instant-kill enemies
         
         # Draw UI overlay
         stats = self.game.stats
         ui_lines = [
             f"AI Agent Playing",
-            f"Wave: {self.game.current_wave + 1}/5",
+            f"Wave: {self.game.current_wave + 1}/{len(TowerDefenseGame.WAVE_DEFINITIONS)}",
             f"Soldiers: {sum(1 for s in self.game.soldiers if s.alive)}/{len(self.game.soldiers)}",
             f"Wights Killed: {stats['wights_killed']}/300",
             f"Phase: {self.game.phase.value.upper()}"

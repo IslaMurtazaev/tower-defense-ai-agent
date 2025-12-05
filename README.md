@@ -1,10 +1,11 @@
 # 🏰 Winterfell Tower Defense - AI Strategy Learning
 
-A tower defense game inspired by the Battle of Winterfell, featuring intelligent soldier AI with A* pathfinding and reinforcement learning for optimal defender placement.
+A tower defense game inspired by the Battle of Winterfell, featuring intelligent soldier AI with A\* pathfinding and reinforcement learning for optimal defender placement.
 
 ## 🎮 Quick Start
 
 ### Play the Game (Human)
+
 ```bash
 pip install pygame
 cd environment
@@ -14,17 +15,20 @@ python td_pygame.py
 **Controls:** Click to place soldiers, SPACE to start, R to reset
 
 ### Train an AI Agent
+
 ```bash
 pip install -r requirements.txt
 python train_rl_agent.py
 ```
 
 **Monitor training:**
+
 ```bash
 tensorboard --logdir trained_models/logs
 ```
 
 **Evaluate trained agent:**
+
 ```bash
 python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 ```
@@ -32,22 +36,25 @@ python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 ## ✨ Key Features
 
 ### Tactical Unit System
-- **A* Pathfinding**: Footmen use intelligent pathfinding to intercept
+
+- **A\* Pathfinding**: Footmen use intelligent pathfinding to intercept
 - **Forced Synergy**: MUST use both unit types to win
 - **Mortal Units**: Soldiers can take damage and die
 - **Two Unit Types**:
-  - **Footmen**: Mobile tanks (200 HP, 100px detection, 50px range, 30 damage, 0.7s attacks)
-  - **Archers**: Static support (60 HP, 450px detection, 450px range, 6 damage, 0.8s attacks)
+  - **Footmen**: Mobile tanks (800 HP, 100px detection, 20px range, instant kill)
+  - **Archers**: Static towers (50 HP, 300px detection, 300px range, instant kill, 0.7s attack speed)
 
 ### Challenging Combat
-- **300 total enemies** across 5 waves (25, 40, 60, 75, 100)
-- **BURST spawning**: 0.05s intervals (waves spawn nearly instantly!)
-- **Wave-based pressure**: Handle 25-100 enemies at once, not gradually
-- **10 soldiers** to defend with - and they can die!
+
+- **400 total enemies** in 1 massive wave
+- **BURST spawning**: 0.05s intervals (20 wights/second!)
+- **Single wave pressure**: All 400 spawn in 20 seconds - no breaks!
+- **20 soldiers** to defend with - and they can die!
 - **Wights attack soldiers**: Enemies engage defenders before castle
-- **Horde tactics**: Individual wights are weak (30 HP) but waves are overwhelming
+- **Horde tactics**: Individual wights are instant-kill but 400 is overwhelming
 
 ### RL Training System
+
 - **Algorithm**: PPO (Proximal Policy Optimization)
 - **Training Time**: ~25-30 minutes for 500K steps (8 parallel envs)
 - **Speed**: 20-40x faster with optimizations
@@ -56,19 +63,20 @@ python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
 
 ## 📊 Game Stats
 
-| Metric | Value |
-|--------|-------|
-| Total Enemies | 300 wights |
-| Waves | 5 progressive waves |
-| Max Soldiers | 10 defenders |
-| Castle HP | 100 |
-| Map Size | 1280x800 |
-| Win Rate (Random) | 0-5% |
-| Win Rate (Trained AI) | 20-60% |
+| Metric                | Value        |
+| --------------------- | ------------ |
+| Total Enemies         | 400 wights   |
+| Waves                 | 1 wave       |
+| Max Soldiers          | 20 defenders |
+| Castle HP             | 100          |
+| Map Size              | 1280x800     |
+| Win Rate (Random)     | 0-5%         |
+| Win Rate (Trained AI) | 20-60%       |
 
 ## 🤖 RL Training
 
 ### Basic Training
+
 ```bash
 # Standard training (30 min)
 python train_rl_agent.py --n-envs 8 --total-timesteps 500000
@@ -81,17 +89,20 @@ python train_rl_agent.py --n-envs 8 --total-timesteps 2000000
 ```
 
 ### Monitor Progress
+
 ```bash
 tensorboard --logdir trained_models/logs
 # Open http://localhost:6006
 ```
 
 Watch for:
+
 - **Episode reward** trending upward
 - **Win rate** increasing
 - **Policy loss** decreasing
 
 ### Evaluate Agent
+
 ```bash
 # Standard evaluation
 python evaluate_agent.py --model trained_models/best_model.zip --episodes 20
@@ -104,6 +115,7 @@ python evaluate_agent.py --model trained_models/best_model.zip --compare
 ```
 
 **Visualization Features:**
+
 - Castle HP bar with color coding (green/orange/red)
 - Clear unit distinction: Blue circles (Footmen) vs Green triangles (Archers)
 - Real-time stats overlay (wave, soldiers, kills)
@@ -129,11 +141,13 @@ tower_defense/
 ## 🚀 Performance
 
 ### Training Speed
+
 - **4 envs + fast mode**: ~50 min for 500K steps
 - **8 envs + fast mode**: ~25 min for 500K steps
 - **16 envs + fast mode**: ~12 min for 500K steps
 
 ### RL Results
+
 - **0-50K steps**: Random exploration (~0% win)
 - **100K steps**: Learning basics (~10% win)
 - **500K steps**: Good strategies (~30% win)
@@ -142,6 +156,7 @@ tower_defense/
 ## 🎓 What the AI Learns
 
 Through training, agents discover:
+
 1. **Archer Placement**: Where to position static archers for maximum coverage
 2. **Footmen Positioning**: Where mobile interceptors should patrol from
 3. **Unit Composition**: How many mobile vs static units to deploy
@@ -152,6 +167,7 @@ Through training, agents discover:
 ## 🛠️ Common Commands
 
 ### Installation
+
 ```bash
 # Basic gameplay
 pip install pygame
@@ -161,6 +177,7 @@ pip install -r requirements.txt
 ```
 
 ### Testing
+
 ```bash
 # Test core game
 python test_game.py
@@ -173,6 +190,7 @@ python demo_ai.py
 ```
 
 ### Troubleshooting
+
 ```bash
 # If missing tqdm/rich
 pip install tqdm rich
@@ -185,11 +203,12 @@ pip install stable-baselines3[extra]
 
 - **[TRAINING_GUIDE.md](TRAINING_GUIDE.md)** - Complete RL training guide (PPO, hyperparameters, monitoring)
 - **[GAME_GUIDE.md](GAME_GUIDE.md)** - Game mechanics, controls, and strategy
-- **[AI_SYSTEM.md](AI_SYSTEM.md)** - Technical details on A* pathfinding (advanced)
+- **[AI_SYSTEM.md](AI_SYSTEM.md)** - Technical details on A\* pathfinding (advanced)
 
 ## 🎯 Quick Examples
 
 ### Train and Evaluate
+
 ```bash
 # Train
 python train_rl_agent.py --n-envs 8
@@ -205,6 +224,7 @@ python evaluate_agent.py --model trained_models/best_model.zip --visualize
 ```
 
 ### Speed Training
+
 ```bash
 # Fast training with default fast mode (5x simulation speed)
 python train_rl_agent.py --n-envs 16 --total-timesteps 500000
@@ -212,12 +232,13 @@ python train_rl_agent.py --n-envs 16 --total-timesteps 500000
 
 ## 🏆 Victory Conditions
 
-- **Victory**: Survive all 5 waves (kill all 300 wights)
+- **Victory**: Kill all 400 wights
 - **Defeat**: Castle destroyed (HP reaches 0)
 
 ## 🔧 Customization
 
 Edit `environment/td_game_core.py` to adjust:
+
 ```python
 MAX_SOLDIERS = 10           # Number of defenders
 WAVE_DEFINITIONS = [...]    # Enemies per wave
@@ -227,12 +248,14 @@ spawn_interval = 0.3        # Spawn speed
 ## 📊 Reward Structure
 
 **During Combat:**
+
 - +10 per wight killed
 - -30 per soldier lost (NEW!)
 - -5 per castle damage point
 - -1 for invalid placement
 
 **Episode End:**
+
 - +500 for victory
 - -200 for defeat
 - +50 per wave completed
@@ -252,4 +275,3 @@ Academic project - CS6660 Intro to AI
 ---
 
 **"Winter is here. Can your AI defend Winterfell?"** ❄️🏰⚔️🤖
-
