@@ -28,7 +28,7 @@ class TowerDefenseVisualization:
     COLOR_BUTTON_HOVER = (90, 90, 110)
     COLOR_BUTTON_DISABLED = (50, 50, 60)
     
-    def __init__(self):
+    def __init__(self, speed_multiplier: float = 1.0):
         pygame.init()
         
         # Display
@@ -39,8 +39,9 @@ class TowerDefenseVisualization:
         self.clock = pygame.time.Clock()
         self.fps = 60
         
-        # Game instance
-        self.game = TowerDefenseGame()
+        # Game instance with speed multiplier
+        self.game = TowerDefenseGame(speed_multiplier=speed_multiplier)
+        self.speed_multiplier = speed_multiplier
         
         # UI state
         self.selected_soldier_type = SoldierType.FOOTMAN
@@ -123,7 +124,9 @@ class TowerDefenseVisualization:
     def update(self):
         """Update game state"""
         if self.game.phase == GamePhase.COMBAT:
-            dt = self.clock.get_time() / 1000.0  # Convert to seconds
+            # Use FIXED dt for deterministic simulation
+            # Speed multiplier is handled inside game.update()
+            dt = 1.0 / 60.0  # Fixed 60 FPS timestep
             self.game.update(dt)
     
     def render(self):
@@ -464,7 +467,19 @@ class TowerDefenseVisualization:
 
 def main():
     """Entry point"""
-    game = TowerDefenseVisualization()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Winterfell Tower Defense Game')
+    parser.add_argument('--speed', type=float, default=1.0,
+                       help='Game speed multiplier (default: 1.0, try 2.0, 5.0, or 10.0 for faster)')
+    
+    args = parser.parse_args()
+    
+    # Show speed info if not default
+    if args.speed != 1.0:
+        print(f"🚀 Running game at {args.speed}x speed")
+    
+    game = TowerDefenseVisualization(speed_multiplier=args.speed)
     game.run()
 
 

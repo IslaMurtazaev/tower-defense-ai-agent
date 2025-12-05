@@ -147,8 +147,8 @@ class Soldier:
         
         # Stats based on type
         if soldier_type == SoldierType.FOOTMAN:
-            self.hp = 200
-            self.max_hp = 200
+            self.hp = 250
+            self.max_hp = 250
             self.attack_range = 30
             self.damage = 30
             self.attack_speed = 0.5  # seconds between attacks (FASTER - was 1.0)
@@ -159,7 +159,7 @@ class Soldier:
             self.hp = 50
             self.max_hp = 50
             self.attack_range = 400
-            self.damage = 10
+            self.damage = 15
             self.attack_speed = 0.9
             self.detection_radius = 400  # Long range - matches attack range
             self.move_speed = 0  # STATIC - doesn't move
@@ -407,7 +407,10 @@ class TowerDefenseGame:
     WAVE_DEFINITIONS = [25, 40, 60, 75, 100]  # Number of wights per wave (5x multiplier)
     TIME_BETWEEN_WAVES = 0.0  # seconds
     
-    def __init__(self):
+    def __init__(self, speed_multiplier: float = 1.0):
+        # Game settings
+        self.speed_multiplier = speed_multiplier  # 1.0 = normal, 2.0 = 2x speed, etc.
+        
         # Game state
         self.phase = GamePhase.PLACEMENT
         self.game_time = 0.0
@@ -495,21 +498,34 @@ class TowerDefenseGame:
         if self.phase not in [GamePhase.COMBAT]:
             return
         
+        # For deterministic simulation, run multiple small steps instead of scaling dt
+        # This ensures consistent behavior regardless of speed_multiplier
+        num_substeps = max(1, int(round(self.speed_multiplier)))
+        dt_substep = dt  # Keep dt small and constant
+        
+        for _ in range(num_substeps):
+            if self.phase not in [GamePhase.COMBAT, GamePhase.VICTORY, GamePhase.DEFEAT]:
+                break
+            self._update_substep(dt_substep)
+    
+    def _update_substep(self, dt: float):
+        """Single simulation step with fixed dt"""
         self.game_time += dt
         
         # Wave spawning logic
         if not self.waiting_for_next_wave:
             if self.wights_to_spawn_this_wave > 0:
                 self.time_since_last_spawn += dt
-                if self.time_since_last_spawn >= self.spawn_interval:
+                # Use while loop to handle multiple spawns per frame at high speeds
+                while self.time_since_last_spawn >= self.spawn_interval and self.wights_to_spawn_this_wave > 0:
                     self._spawn_wight()
                     self.wights_to_spawn_this_wave -= 1
-                    self.time_since_last_spawn = 0.0
+                    self.time_since_last_spawn -= self.spawn_interval  # Preserve overflow time
                     
-                    # If that was the last wight of this wave, start waiting
-                    if self.wights_to_spawn_this_wave == 0:
-                        self.waiting_for_next_wave = True
-                        self.next_wave_timer = 0.0
+                # If that was the last wight of this wave, start waiting
+                if self.wights_to_spawn_this_wave == 0:
+                    self.waiting_for_next_wave = True
+                    self.next_wave_timer = 0.0
         else:
             # Check if all wights are dead
             if not any(w.alive for w in self.wights):
