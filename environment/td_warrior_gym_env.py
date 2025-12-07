@@ -55,12 +55,17 @@ class HeadlessWarriorGame:
         self.nks: List[game.NightKing] = []
         self.heroes: List = []
         self.burns: List[game.BurningEffect] = []
+        self.base_hit_effects: List[game.BaseHitEffect] = []
         self.stats = {
             'wights_killed': 0,
+            'soldier_nk_attacks': 0,  # Track when soldiers attack Night Kings
+            'soldiers_killed_by_nk_sweep': 0,  # Track soldiers killed by NK sweeps
             'soldiers_killed': 0,
             'nk_kills': 0,
             'soldiers_deployed': 0,
             'base_hits': 0,
+            'soldiers_far_from_base': 0,  # Track soldiers too far from base
+            'enemies_near_base': 0,  # Track enemies close to base
         }
         self.runtime = 0.0
         self.spawn_timer = 0.0
@@ -94,7 +99,7 @@ class HeadlessWarriorGame:
             self.spawn_wight(initial=True)
 
     # ------------------------------------------------------------------
-    # Soldier placement and combat control
+    # Unit placement and combat control
     # ------------------------------------------------------------------
     def place_soldier(self, x: float, y: float) -> bool:
         """Place a soldier at position (x, y). Returns True if successful."""
@@ -114,6 +119,34 @@ class HeadlessWarriorGame:
         soldier = game.Soldier((x, y), spawn_angle=ang)
         self.soldiers.append(soldier)
         self.stats['soldiers_deployed'] += 1
+        return True
+
+    def place_hero(self, x: float, y: float, hero_type: int = 0) -> bool:
+        """Place a hero at position (x, y). hero_type: 0=Jon, 1=Daenerys. Returns True if successful."""
+        if not self.placement_phase:
+            return False
+        if len(self.heroes) >= 2:  # Maximum 2 heroes allowed
+            return False
+
+        dist_to_base = math.hypot(x - BASE_POS[0], y - BASE_POS[1])
+        if dist_to_base < BASE_RADIUS + 80:
+            return False
+
+        if not (50 < x < SCREEN_W - 50 and 50 < y < SCREEN_H - 150):
+            return False
+
+        ang = math.atan2(y - BASE_POS[1], x - BASE_POS[0])
+        if hero_type == 0:
+            hero = game.Jon(ang)
+        else:
+            # Daenerys always starts hovering on the tower, regardless of placement position
+            hero = game.Daenerys(ang)
+            # Override position to tower center (her __init__ already does this, but ensure it)
+            hero.x = BASE_POS[0]
+            hero.y = BASE_POS[1]
+        # Hero starts active and will target nearest Night King when one appears
+        hero.active = True
+        self.heroes.append(hero)
         return True
 
     def start_combat(self):
@@ -161,15 +194,9 @@ class HeadlessWarriorGame:
                 for _ in range(burst):
                     self.spawn_wight()
 
-                # Deploy hero: Jon for even NKs, Daenerys for odd
-                if ns['index'] % 2 == 0:
-                    hero = game.Jon(math.atan2(nk.pos()[1] - BASE_POS[1], nk.pos()[0] - BASE_POS[0]))
-                    hero.deploy_for(nk)
-                    self.heroes.append(hero)
-                else:
-                    hero = game.Daenerys(math.atan2(nk.pos()[1] - BASE_POS[1], nk.pos()[0] - BASE_POS[0]))
-                    hero.deploy_for(nk)
-                    self.heroes.append(hero)
+                # Heroes are now deployed by RL agent during placement phase
+                # They will automatically target Night Kings when they engage
+                # No auto-deployment here - heroes are already on the field
         elif self.nk_state == "active":
             if self.current_nk and (not self.current_nk.alive or self.current_nk.reached):
                 if not self.current_nk.alive and not getattr(self.current_nk, "death_processed", False):
@@ -215,6 +242,7 @@ class HeadlessWarriorGame:
             res = nk.step(dt)
             if res == "sweep":
                 # NK sweep attack: instant kill all soldiers in radius
+                # This is a learning signal for RL: soldiers near NKs get killed
                 kx, ky = nk.pos()
                 for soldier in list(self.soldiers):
                     if math.hypot(soldier.x - kx, soldier.y - ky) <= game.NK_SWEEP_RADIUS:
@@ -225,6 +253,7 @@ class HeadlessWarriorGame:
                         except ValueError:
                             pass
                         self.stats['soldiers_killed'] += 1
+                        self.stats['soldiers_killed_by_nk_sweep'] += 1
                         if self.sound_engine and getattr(self.sound_engine, "sfx_enabled", False):
                             if hasattr(self.sound_engine, "play_sound"):
                                 self.sound_engine.play_sound("shock", volume=0.7)
@@ -234,22 +263,17 @@ class HeadlessWarriorGame:
                                     self.sound_engine.sounds["shock"].play()
                                 except Exception:
                                     pass
-            # Auto-deploy hero when NK engages (if not already deployed)
+            # Heroes are deployed by RL agent during placement phase
+            # When Night King engages, assign available heroes to target it
             if nk.locked_for_battle and nk.alive:
-                hero_present = any(
-                    (isinstance(h, game.Jon) and h.active and h.target is nk) or
-                    (isinstance(h, game.Daenerys) and h.active and h.target is nk)
-                    for h in self.heroes
-                )
-                if not hero_present:
-                    if nk.index % 2 == 0:
-                        new_jon = game.Jon(math.atan2(nk.pos()[1] - BASE_POS[1], nk.pos()[0] - BASE_POS[0]))
-                        new_jon.deploy_for(nk)
-                        self.heroes.append(new_jon)
-                    else:
-                        new_daen = game.Daenerys(math.atan2(nk.pos()[1] - BASE_POS[1], nk.pos()[0] - BASE_POS[0]))
-                        new_daen.deploy_for(nk)
-                        self.heroes.append(new_daen)
+                # Find heroes without a target or with dead target
+                available_heroes = [h for h in self.heroes if h.active and (h.target is None or not h.target.alive)]
+                for hero in available_heroes:
+                    # Assign hero to this Night King if not already targeting it
+                    if hero.target is not nk:
+                        hero.deploy_for(nk)
+                        # With 2 heroes, we can assign both to the same NK (faster kill) or different NKs
+                        # This will naturally distribute if multiple NKs are active
 
         # Update enemies
         for enemy in list(self.enemies):
@@ -262,6 +286,8 @@ class HeadlessWarriorGame:
                 if enemy.reached:
                     self.base_hp -= 1
                     self.stats['base_hits'] += 1
+                    # Create visual impact effect
+                    self.base_hit_effects.append(game.BaseHitEffect())
                     # Play base hit sound
                     if self.sound_engine and getattr(self.sound_engine, "sfx_enabled", False):
                         if hasattr(self.sound_engine, "play_sound"):
@@ -274,22 +300,85 @@ class HeadlessWarriorGame:
                                 pass
 
         # Update soldiers: they target both wights and Night Kings
+        # RL agents must LEARN to place soldiers away from NKs to avoid sweep deaths
+        # The reward penalties (soldiers_killed_by_nk_sweep) provide the learning signal
         active_enemies = list(self.enemies) + list(self.nks)
+
+        # Track how many soldiers are defending the base vs chasing enemies far away
+        # This helps the agent learn to keep soldiers near base when enemies are close
+        BASE_DEFENSE_RADIUS = 200.0  # Soldiers within 200 pixels count as "defending"
+        ENEMY_THREAT_RADIUS = 250.0  # Enemies within 250 pixels are "threatening" the base
+        soldiers_near_base = 0
+        enemies_near_base = 0
+
         for soldier in list(self.soldiers):
             soldier.step(dt, active_enemies, self.burns, self.sound_engine, self.stats)
+            # Check if this soldier is close enough to the base to defend it
+            dist_to_base = math.hypot(soldier.x - BASE_POS[0], soldier.y - BASE_POS[1])
+            if dist_to_base <= BASE_DEFENSE_RADIUS:
+                soldiers_near_base += 1
 
-        # Update heroes
+        # Count how many enemies are close to the base (they're a threat)
+        for enemy in active_enemies:
+            if enemy.alive and enemy.spawn_delay <= 0:
+                if hasattr(enemy, 'pos'):
+                    enemy_pos = enemy.pos()
+                else:
+                    enemy_pos = (enemy.x, enemy.y) if hasattr(enemy, 'x') else (0, 0)
+                dist_to_base = math.hypot(enemy_pos[0] - BASE_POS[0], enemy_pos[1] - BASE_POS[1])
+                if dist_to_base <= ENEMY_THREAT_RADIUS:
+                    enemies_near_base += 1
+
+        # Save these stats so we can use them for rewards later
+        # If soldiers are far from base when enemies are near, that's bad
+        self.stats['soldiers_far_from_base'] = len(self.soldiers) - soldiers_near_base
+        self.stats['enemies_near_base'] = enemies_near_base
+
+        # Update heroes - prioritize Night Kings, but also attack wights when no NKs present
         for hero in list(self.heroes):
+            # If hero is inactive (returned to base) or has no target, find a new target
+            if not hero.active or (hero.target is None or not hero.target.alive):
+                # Priority 1: Find nearest active Night King (if any)
+                best_nk = None
+                best_nk_dist = float('inf')
+                for nk in self.nks:
+                    if nk.alive and nk.locked_for_battle:
+                        nk_pos = nk.pos()
+                        hero_pos = (hero.x, hero.y)
+                        dist = math.hypot(nk_pos[0] - hero_pos[0], nk_pos[1] - hero_pos[1])
+                        if dist < best_nk_dist:
+                            best_nk_dist = dist
+                            best_nk = nk
+
+                # Priority 2: If no Night King, find nearest wight
+                best_wight = None
+                best_wight_dist = float('inf')
+                if not best_nk:
+                    for enemy in self.enemies:
+                        if enemy.alive and enemy.spawn_delay <= 0:
+                            enemy_pos = enemy.pos()
+                            hero_pos = (hero.x, hero.y)
+                            dist = math.hypot(enemy_pos[0] - hero_pos[0], enemy_pos[1] - hero_pos[1])
+                            if dist < best_wight_dist:
+                                best_wight_dist = dist
+                                best_wight = enemy
+
+                # Assign target (NK takes priority)
+                if best_nk:
+                    # Reactivate hero and deploy for Night King
+                    hero.deploy_for(best_nk)
+                elif best_wight:
+                    # Assign wight as target and activate hero
+                    hero.target = best_wight
+                    hero.active = True
+                    hero.returning = False
+
             if isinstance(hero, game.Jon):
                 hero.step(dt, self.stats, self.sound_engine)
             elif isinstance(hero, game.Daenerys):
-                hero.step(dt, self.sound_engine, self.stats)
-            # Remove inactive heroes
-            if hasattr(hero, 'active') and not hero.active:
-                try:
-                    self.heroes.remove(hero)
-                except ValueError:
-                    pass
+                hero.step(dt, self.sound_engine, self.stats, self.nks)  # Pass nks so she can check for Night Kings in range
+            # DO NOT remove inactive heroes - they should remain available for next Night King
+            # Heroes will be reactivated when a new Night King appears via deploy_for() above
 
         # Update burn effects to avoid unbounded growth
         for burn in list(self.burns):
@@ -299,12 +388,26 @@ class HeadlessWarriorGame:
                 except ValueError:
                     pass
 
+        # Update base hit effects
+        for hit_effect in list(self.base_hit_effects):
+            if hit_effect.step(dt):
+                try:
+                    self.base_hit_effects.remove(hit_effect)
+                except ValueError:
+                    pass
+
         if self.base_hp <= 0:
             self.game_over = True
             self.combat_phase = False
-        elif self.runtime >= self.max_runtime:
-            self.victory = True
-            self.combat_phase = False
+        else:
+            # Victory check: all Night Kings spawned and all killed
+            all_spawned = all(ns['spawned'] for ns in self.nk_schedule)
+            active_nks = any(nk for nk in self.nks if nk.alive)
+            if all_spawned and not active_nks:
+                # Check if all scheduled NKs have been killed
+                if self.stats.get('nk_kills', 0) >= len(self.nk_schedule):
+                    self.victory = True
+                    self.combat_phase = False
 
     def is_game_over(self) -> bool:
         return self.game_over or self.victory
@@ -338,11 +441,12 @@ class TowerDefenseWarriorEnv(gym.Env):
     # Grid size for observation
     GRID_SIZE = 32
 
-    def __init__(self, render_mode: Optional[str] = None, fast_mode: bool = True):
+    def __init__(self, render_mode: Optional[str] = None, fast_mode: bool = True, fast_multiplier: int = 5):
         super().__init__()
 
         self.render_mode = render_mode
         self.fast_mode = fast_mode
+        self.fast_multiplier = fast_multiplier
         self.sound_engine_initialized = False
 
         # Create headless game simulation
@@ -351,10 +455,13 @@ class TowerDefenseWarriorEnv(gym.Env):
         # Define observation space
         self.observation_space = spaces.Dict({
             'grid': spaces.Box(
-                low=0, high=4, shape=(self.GRID_SIZE, self.GRID_SIZE), dtype=np.int32
+                low=0, high=5, shape=(self.GRID_SIZE, self.GRID_SIZE), dtype=np.int32
             ),
             'soldiers_remaining': spaces.Box(
                 low=0, high=SOLDIER_MAX, shape=(1,), dtype=np.int32
+            ),
+            'heroes_remaining': spaces.Box(
+                low=0, high=2, shape=(1,), dtype=np.int32
             ),
             'base_hp_ratio': spaces.Box(
                 low=0.0, high=1.0, shape=(1,), dtype=np.float32
@@ -368,9 +475,9 @@ class TowerDefenseWarriorEnv(gym.Env):
         })
 
         # Define action space
-        # [grid_x, grid_y] - placement position
-        # Can expand to [warrior_type, grid_x, grid_y] later
-        self.action_space = spaces.MultiDiscrete([self.GRID_SIZE, self.GRID_SIZE])
+        # [unit_type, grid_x, grid_y] - unit_type: 0=soldier, 1=hero
+        # Total units: 6 soldiers + 2 heroes = 8 units (increased from 6)
+        self.action_space = spaces.MultiDiscrete([2, self.GRID_SIZE, self.GRID_SIZE])
 
         # Episode tracking
         self.placement_actions_taken = 0
@@ -379,8 +486,14 @@ class TowerDefenseWarriorEnv(gym.Env):
         # Reward tracking
         self.last_wights_killed = 0
         self.last_soldiers_killed = 0
+        self.last_soldier_nk_attacks = 0
+        self.last_soldiers_killed_by_nk_sweep = 0
         self.last_base_hp = BASE_HP_MAX
         self.last_nk_kills = 0
+        self.last_wave = 0
+        self._last_soldiers_alive = 6  # Track how many soldiers are alive (we have 6 max now)
+        self.last_soldiers_far_from_base = 0
+        self.last_enemies_near_base = 0
 
         # For rendering
         self.pygame_initialized = False
@@ -409,7 +522,12 @@ class TowerDefenseWarriorEnv(gym.Env):
         self.last_wights_killed = 0
         self.last_soldiers_killed = 0
         self.last_base_hp = BASE_HP_MAX
+        self.last_soldier_nk_attacks = 0
+        self.last_soldiers_killed_by_nk_sweep = 0
         self.last_nk_kills = 0
+        self.last_wave = 0
+        self.last_soldiers_far_from_base = 0
+        self.last_enemies_near_base = 0
         self.combat_running = False
         self.combat_time = 0.0
 
@@ -429,30 +547,63 @@ class TowerDefenseWarriorEnv(gym.Env):
         terminated = False
         truncated = False
 
-        # Placement phase
         if self.game_state.placement_phase:
-            grid_x, grid_y = action
+            unit_type, grid_x, grid_y = action
+
+            unit_type = int(np.clip(unit_type, 0, 1))
+            grid_x = int(np.clip(grid_x, 0, self.GRID_SIZE - 1))
+            grid_y = int(np.clip(grid_y, 0, self.GRID_SIZE - 1))
 
             # Convert grid coordinates to world coordinates
             world_x = (grid_x / self.GRID_SIZE) * SCREEN_W
             world_y = (grid_y / self.GRID_SIZE) * SCREEN_H
 
-            # Try to place soldier
-            success = self.game_state.place_soldier(world_x, world_y)
+            # Place unit based on type
+            if unit_type == 0:
+                # Place soldier
+                success = self.game_state.place_soldier(world_x, world_y)
+            else:
+                # Place hero (hero_type: 0=Jon, 1=Daenerys)
+                # Alternate between Jon and Daenerys: first hero is Jon, second is Daenerys
+                hero_type = len(self.game_state.heroes) % 2  # 0 for first hero (Jon), 1 for second (Daenerys)
+                success = self.game_state.place_hero(world_x, world_y, hero_type)
 
             if success:
-                reward += 5.0
+                if unit_type == 1:  # Hero placement
+                    reward += 5.0  # Normalized from 50.0
+                else:  # Soldier placement
+                    reward += 1.0  # Normalized from 10.0
             else:
-                reward -= 1.0
+                reward -= 0.1  # Normalized from 1.0
 
             self.placement_actions_taken += 1
 
-            # Start combat once all soldiers are placed
-            if self.placement_actions_taken >= SOLDIER_MAX or len(self.game_state.soldiers) >= SOLDIER_MAX:
-                if len(self.game_state.soldiers) >= SOLDIER_MAX:
-                    reward += 20.0
-                else:
-                    reward -= 10.0
+            total_units = len(self.game_state.soldiers) + len(self.game_state.heroes)
+            heroes_placed = len(self.game_state.heroes)
+            soldiers_placed = len(self.game_state.soldiers)
+            if heroes_placed == 1:
+                reward += 2.0
+            elif heroes_placed == 2:
+                reward += 5.0
+
+            # Reward for placing soldiers - we want all 6, not just 4
+            if soldiers_placed >= 4:
+                reward += 1.0  # Good, but we want more
+            if soldiers_placed >= 6:
+                reward += 2.0  # Great! All 6 soldiers placed for better defense
+
+            # Start combat once all units are placed (6 soldiers + 2 heroes = 8 total)
+            if total_units >= 8:
+                # All units successfully placed - STRONG reward
+                reward += 15.0  # INCREASED from 10.0 - very strong incentive to place all 8 units
+                self.game_state.start_combat()
+                self.combat_running = True
+            elif self.placement_actions_taken >= 12:
+                # Force combat after 12 attempts (even if not all units placed)
+                # This prevents infinite placement phase if agent keeps failing
+                # STRONG penalty for not placing all units
+                missing_units = 8 - total_units
+                reward -= 5.0 * missing_units  # INCREASED penalty - 5.0 per missing unit
                 self.game_state.start_combat()
                 self.combat_running = True
 
@@ -460,7 +611,7 @@ class TowerDefenseWarriorEnv(gym.Env):
         if self.game_state.combat_phase:
             if self.fast_mode:
                 # Fast mode: simulate multiple frames per step for faster training
-                updates_per_step = 5
+                updates_per_step = self.fast_multiplier
                 dt = 1.0 / 60.0
                 for _ in range(updates_per_step):
                     self._simulate_combat_step(dt)
@@ -490,56 +641,146 @@ class TowerDefenseWarriorEnv(gym.Env):
         self.game_state.update(dt)
 
     def _calculate_step_reward(self) -> float:
-        """Calculate reward for a single combat step"""
+        """Calculate reward for a single combat step - NORMALIZED for stable Q-learning"""
         reward = 0.0
 
         # Survival bonus: reward for staying alive each step
         if self.game_state.combat_phase:
-            reward += 1.0
+            reward += 0.1  # Reduced from 1.0
 
-        # Track kills and deaths (delta rewards)
+        # Wave completion bonus (reward for progressing through waves)
+        wave_completed_this_step = self.game_state.current_wave - self.last_wave
+        if wave_completed_this_step > 0:
+            reward += wave_completed_this_step * 10.0  # Reduced from 100.0
+        self.last_wave = self.game_state.current_wave
+
+        # Track kills and deaths (delta rewards) - NORMALIZED
         wights_killed_this_step = self.game_state.stats['wights_killed'] - self.last_wights_killed
-        reward += wights_killed_this_step * 10.0
+        reward += wights_killed_this_step * 1.0  # Normalized from 2.0
         self.last_wights_killed = self.game_state.stats['wights_killed']
 
         nk_kills_this_step = self.game_state.stats['nk_kills'] - self.last_nk_kills
-        reward += nk_kills_this_step * 20.0
+        if nk_kills_this_step > 0:
+            reward += nk_kills_this_step * 50.0
         self.last_nk_kills = self.game_state.stats['nk_kills']
 
+        # Reward for soldiers surviving (positive signal for good placement)
+        soldiers_alive_now = len(self.game_state.soldiers)
+        soldiers_alive_before = getattr(self, '_last_soldiers_alive', 4)
+        if soldiers_alive_now < soldiers_alive_before:
+            # Soldiers died - already penalized elsewhere
+            pass
+        elif self.game_state.combat_phase:
+            # Small bonus for each soldier that survives each step (encourages safe placement)
+            reward += soldiers_alive_now * 0.05  # Reduced from 0.5
+        self._last_soldiers_alive = soldiers_alive_now
+
         soldiers_killed_this_step = self.game_state.stats['soldiers_killed'] - self.last_soldiers_killed
-        reward -= soldiers_killed_this_step * 15.0
+        reward -= soldiers_killed_this_step * 5.0  # Normalized from 15.0
         self.last_soldiers_killed = self.game_state.stats['soldiers_killed']
 
-        # Base damage penalty
+        # Base damage penalty - NORMALIZED
         base_damage_this_step = self.last_base_hp - self.game_state.base_hp
-        reward -= base_damage_this_step * 5.0
+        reward -= base_damage_this_step * 20.0  # Keep at 20.0 (already reasonable)
+        # Bonus for keeping base HP high (strategic positioning)
+        if self.game_state.base_hp > 80:
+            reward += 0.01  # Reduced from 0.1
         self.last_base_hp = self.game_state.base_hp
 
+        soldier_nk_attacks_this_step = self.game_state.stats.get('soldier_nk_attacks', 0) - self.last_soldier_nk_attacks
+        reward -= soldier_nk_attacks_this_step * 10.0
+        self.last_soldier_nk_attacks = self.game_state.stats.get('soldier_nk_attacks', 0)
+
+        soldiers_killed_by_nk_this_step = self.game_state.stats.get('soldiers_killed_by_nk_sweep', 0) - self.last_soldiers_killed_by_nk_sweep
+        reward -= soldiers_killed_by_nk_this_step * 15.0
+        self.last_soldiers_killed_by_nk_sweep = self.game_state.stats.get('soldiers_killed_by_nk_sweep', 0)
+
+        # Small bonus for keeping soldiers alive when Night Kings are active
+        if self.game_state.combat_phase and len(self.game_state.nks) > 0:
+            soldiers_alive = len(self.game_state.soldiers)
+            reward += soldiers_alive * 0.2  # Reward for surviving NK threats
+
+        # Base defense: punish soldiers that leave base undefended
+        # If enemies are close to base, soldiers should stay nearby to defend
+        soldiers_far_from_base = self.game_state.stats.get('soldiers_far_from_base', 0)
+        enemies_near_base = self.game_state.stats.get('enemies_near_base', 0)
+
+        # When enemies are threatening, soldiers should be defending
+        if enemies_near_base > 0:
+            # Bad: soldiers leaving base when enemies are near
+            soldiers_far_this_step = soldiers_far_from_base - self.last_soldiers_far_from_base
+            if soldiers_far_this_step > 0:
+                reward -= soldiers_far_this_step * 3.0  # Penalty for leaving base undefended
+
+            # Good: soldiers staying near base to defend
+            soldiers_near_base = len(self.game_state.soldiers) - soldiers_far_from_base
+            if soldiers_near_base > 0:
+                reward += soldiers_near_base * 0.5  # Bonus for defending
+
+        # Extra penalty if lots of enemies are near and most soldiers are far away
+        if enemies_near_base >= 3:  # Multiple enemies near base
+            if soldiers_far_from_base > len(self.game_state.soldiers) / 2:  # More than half soldiers far
+                reward -= 5.0  # Big penalty - base is vulnerable!
+
+        self.last_soldiers_far_from_base = soldiers_far_from_base
+        self.last_enemies_near_base = enemies_near_base
+
+        # Penalty for redundant targeting (multiple units attacking same enemy)
+        if self.game_state.combat_phase:
+            # Track which enemies are being targeted
+            target_counts = {}  # enemy_id -> count of units targeting it
+
+            # Count soldier targets
+            for soldier in self.game_state.soldiers:
+                if hasattr(soldier, 'current_target') and soldier.current_target:
+                    enemy_id = id(soldier.current_target)
+                    target_counts[enemy_id] = target_counts.get(enemy_id, 0) + 1
+
+            # Count hero targets
+            for hero in self.game_state.heroes:
+                if hero.active and hasattr(hero, 'target') and hero.target:
+                    enemy_id = id(hero.target)
+                    target_counts[enemy_id] = target_counts.get(enemy_id, 0) + 1
+
+            # Apply penalty for redundant targeting (2+ units on same enemy)
+            redundant_targets = sum(max(0, count - 1) for count in target_counts.values())
+            if redundant_targets > 0:
+                reward -= redundant_targets * 0.1  # Reduced from 0.5
+
+        # Clip reward to prevent explosion
+        reward = np.clip(reward, -50.0, 50.0)
         return reward
 
     def _calculate_final_reward(self) -> float:
-        """Calculate final reward at end of episode"""
+        """Calculate final reward at end of episode - NORMALIZED for stable Q-learning"""
         reward = 0.0
 
         if self.game_state.victory:
-            # Large victory bonus + bonuses for HP and survivors
-            reward += 2000.0
+            # Victory bonus - NORMALIZED to prevent reward explosion
+            reward += 300.0  # Normalized from 10000.0
             hp_ratio = self.game_state.base_hp / BASE_HP_MAX
-            reward += hp_ratio * 500.0
+            reward += hp_ratio * 50.0  # Normalized from 2000.0
             soldiers_alive = len(self.game_state.soldiers)
-            reward += soldiers_alive * 100.0
+            reward += soldiers_alive * 15.0  # Bonus for keeping soldiers alive - we have 6 max now
         else:
-            # Defeat penalty, but partial credit for waves completed
-            reward -= 500.0
-            reward += self.game_state.current_wave * 50.0
+            # Defeat penalty - NORMALIZED
+            reward -= 300.0  # Normalized from 500.0
+            reward += self.game_state.current_wave * 10.0  # Normalized from 200.0
+            # Bonus for getting close to victory (3/4 NK kills)
+            nk_kills = self.game_state.stats.get('nk_kills', 0)
+            if nk_kills >= 3:
+                reward += 50.0  # Normalized from 500.0
 
+        # Clip final reward to prevent explosion
+        reward = np.clip(reward, -300.0, 400.0)
         return reward
 
     def _get_observation(self) -> Dict:
         """Get current observation"""
         grid = self._create_grid_observation()
 
-        soldiers_remaining = SOLDIER_MAX - len(self.game_state.soldiers)
+        soldiers_remaining = SOLDIER_MAX - len(self.game_state.soldiers)  # Can place up to 6 soldiers now
+        heroes_remaining = 2 - len(self.game_state.heroes)
         base_hp_ratio = self.game_state.base_hp / BASE_HP_MAX
         current_wave = self.game_state.current_wave
         night_king_active = 1 if len(self.game_state.nks) > 0 else 0
@@ -547,6 +788,7 @@ class TowerDefenseWarriorEnv(gym.Env):
         return {
             'grid': grid,
             'soldiers_remaining': np.array([soldiers_remaining], dtype=np.int32),
+            'heroes_remaining': np.array([heroes_remaining], dtype=np.int32),
             'base_hp_ratio': np.array([base_hp_ratio], dtype=np.float32),
             'current_wave': np.array([current_wave], dtype=np.int32),
             'night_king_active': np.array([night_king_active], dtype=np.int32)
@@ -554,8 +796,8 @@ class TowerDefenseWarriorEnv(gym.Env):
 
     def _create_grid_observation(self) -> np.ndarray:
         """Create 32x32 grid representation of game state.
-        
-        Grid values: 0=empty, 1=base, 2=soldier, 3=wight, 4=Night King
+
+        Grid values: 0=empty, 1=base, 2=soldier, 3=wight, 4=Night King, 5=hero
         """
         grid = np.zeros((self.GRID_SIZE, self.GRID_SIZE), dtype=np.int32)
 
@@ -580,6 +822,15 @@ class TowerDefenseWarriorEnv(gym.Env):
             grid_x = np.clip(grid_x, 0, self.GRID_SIZE - 1)
             grid_y = np.clip(grid_y, 0, self.GRID_SIZE - 1)
             grid[grid_y, grid_x] = 2
+
+        # Add heroes
+        for hero in self.game_state.heroes:
+            if hero.active:
+                grid_x = int((hero.x / SCREEN_W) * self.GRID_SIZE)
+                grid_y = int((hero.y / SCREEN_H) * self.GRID_SIZE)
+                grid_x = np.clip(grid_x, 0, self.GRID_SIZE - 1)
+                grid_y = np.clip(grid_y, 0, self.GRID_SIZE - 1)
+                grid[grid_y, grid_x] = 5
 
         # Add enemies
         for enemy in self.game_state.enemies:
@@ -612,8 +863,8 @@ class TowerDefenseWarriorEnv(gym.Env):
             'episode_reward': self.episode_reward,
             'placement_actions_taken': self.placement_actions_taken,
             'base_hp': self.game_state.base_hp,
-            'soldiers_alive': len(self.game_state.soldiers),
             'victory': self.game_state.victory,
+            'soldiers_alive': len(self.game_state.soldiers),
             'game_over': self.game_state.game_over
         }
 
@@ -636,6 +887,7 @@ class TowerDefenseWarriorEnv(gym.Env):
             self.small_font = pygame.font.SysFont("Arial", 12)
             self.font_small = pygame.font.Font(None, 24)
             self.font_tiny = pygame.font.Font(None, 18)
+            self.big_font = pygame.font.SysFont("Georgia", 36, bold=True)
             # Initialize snow particles
             self.snow = [[random.uniform(0, SCREEN_W), random.uniform(-SCREEN_H, 0),
                          random.uniform(20, 120), random.uniform(1.2, 3.8),
@@ -780,6 +1032,13 @@ class TowerDefenseWarriorEnv(gym.Env):
                     ttxt = self.small_font.render("Jon Snow — Longclaw", True, (220, 220, 230))
                     self.screen.blit(ttxt, (int(hero.x - ttxt.get_width() / 2), int(hero.y - 58)))
 
+        # Draw burn effects (wight death flashes)
+        for burn in self.game_state.burns:
+            burn.draw(self.screen)
+
+        # Draw base hit effects (before base so base appears on top)
+        for hit_effect in self.game_state.base_hit_effects:
+            hit_effect.draw(self.screen, BASE_POS, BASE_RADIUS)
 
         # Draw base
         pygame.draw.circle(self.screen, (50, 50, 60), BASE_POS, BASE_RADIUS)
@@ -833,8 +1092,12 @@ class TowerDefenseWarriorEnv(gym.Env):
             True, (220, 220, 200))
         self.screen.blit(soldier_hud, (14, 40))
         killed_hud = self.font.render(
-            f"Wights Killed: {self.game_state.stats['wights_killed']}   NKs Defeated: {self.game_state.stats['nk_kills']}/5   Time: {int(self.game_state.runtime)}s",
-            True, (220, 220, 200))
+            f"Wights Killed: {self.game_state.stats['wights_killed']}   "
+            f"NKs Defeated: {self.game_state.stats['nk_kills']}/{len(game.NK_SCHEDULE_TIMES)}   "
+            f"Time: {int(self.game_state.runtime)}s",
+            True,
+            (220, 220, 200),
+        )
         self.screen.blit(killed_hud, (14, 68))
 
         # Phase indicator
@@ -842,6 +1105,34 @@ class TowerDefenseWarriorEnv(gym.Env):
         phase_color = (100, 200, 100) if self.game_state.placement_phase else (200, 100, 100)
         phase_surf = self.font_small.render(phase_text, True, phase_color)
         self.screen.blit(phase_surf, (SCREEN_W - phase_surf.get_width() - 14, 12))
+
+        # Game over / victory overlay
+        if self.game_state.is_game_over():
+            overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 190))
+            self.screen.blit(overlay, (0, 0))
+            victory = self.game_state.victory
+            title = self.big_font.render(
+                "WINTERFELL PREVAILS" if victory else "WINTERFELL HAS FALLEN",
+                True,
+                (200, 230, 210) if victory else (255, 190, 180)
+            )
+            self.screen.blit(title, (SCREEN_W / 2 - title.get_width() / 2, SCREEN_H / 2 - 220))
+            mid_font = pygame.font.SysFont("Arial", 24)
+            lines = [
+                f"Time Survived: {int(self.game_state.runtime)} s",
+                f"Soldiers Deployed: {self.game_state.stats['soldiers_deployed']}",
+                f"Soldiers Killed: {self.game_state.stats['soldiers_killed']}",
+                f"Wights Killed: {self.game_state.stats['wights_killed']}",
+                f"Night Kings Defeated: {self.game_state.stats['nk_kills']}/{len(game.NK_SCHEDULE_TIMES)}",
+                "",
+                "Press R to Restart • Press Q to Quit"
+            ]
+            y = SCREEN_H / 2 - 60
+            for line in lines:
+                txt = mid_font.render(line, True, (240, 240, 240))
+                self.screen.blit(txt, (SCREEN_W / 2 - txt.get_width() / 2, y))
+                y += 36
 
         # Convert to numpy array
         return np.transpose(
@@ -865,6 +1156,7 @@ class TowerDefenseWarriorEnv(gym.Env):
             self.small_font = pygame.font.SysFont("Arial", 12)
             self.font_small = pygame.font.Font(None, 24)
             self.font_tiny = pygame.font.Font(None, 18)
+            self.big_font = pygame.font.SysFont("Georgia", 36, bold=True)
             # Initialize snow particles
             self.snow = [[random.uniform(0, SCREEN_W), random.uniform(-SCREEN_H, 0),
                          random.uniform(20, 120), random.uniform(1.2, 3.8),
