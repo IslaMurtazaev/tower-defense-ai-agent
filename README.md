@@ -265,6 +265,74 @@ tower-defense-ai-agent/
 - **Max Soldiers**: 6 active soldiers
 - **Max Heroes**: 2 (Jon Snow and Daenerys)
 
+## Reward Structure
+
+The agents learn through a combination of environment rewards and additional reward shaping. The reward structure encourages strategic placement, base defense, and Night King avoidance.
+
+### Base Environment Rewards (Both Agents)
+
+| Reward/Penalty | Value | Description |
+|---------------|-------|-------------|
+| **Survival Bonus** | +0.1/step | Small reward for staying alive during combat |
+| **Wave Completion** | +10.0 | Bonus for completing each wave |
+| **Wight Killed** | +1.0 | Reward for eliminating a wight |
+| **Night King Killed** | +50.0 | Large reward for defeating a Night King (heroes only) |
+| **Soldier Survival** | +0.05/soldier/step | Small bonus per soldier alive during combat |
+| **NK Threat Survival** | +0.2/soldier | Bonus per soldier alive when Night Kings are active |
+| **Base HP High** | +0.01 | Small bonus if base HP > 80 |
+| **Base Defense** | +0.5/soldier | Bonus per soldier near base when enemies threaten |
+| **Soldier Killed** | -5.0 | Penalty for losing a soldier (any cause) |
+| **Base Damage** | -20.0/HP | Penalty per HP lost from base |
+| **Soldier Attacks NK** | -10.0 | Penalty for soldiers attacking Night Kings (wasteful, they can't damage NKs) |
+| **Soldier Killed by NK** | -15.0 | Penalty per soldier killed by Night King sweep attack |
+| **Leaving Base Undefended** | -3.0/soldier | Penalty per soldier that moves away from base when enemies are near |
+| **Poor Base Defense** | -5.0 | Penalty if many enemies near base AND most soldiers are far away |
+
+### Q-Learning Agent Additional Rewards
+
+| Reward/Penalty | Value | Description |
+|---------------|-------|-------------|
+| **NK Kill (incremental)** | +25.0 | Additional bonus per new Night King killed during episode |
+| **Soldier Killed by NK (incremental)** | -30.0 | Strong penalty per new soldier killed by NK sweep |
+| **Base Damage (incremental)** | -30.0 | Penalty per base HP lost during episode |
+| **Poor Defense Strategy** | -10.0 | Penalty if enemies near base AND >50% soldiers are far |
+| **Good Defense Strategy** | +2.0/soldier | Bonus per soldier near base when enemies threaten |
+
+**Terminal Rewards (Episode End):**
+
+| Condition | Reward/Penalty | Description |
+|-----------|---------------|-------------|
+| **Victory** | +50.0 | Base victory bonus |
+| **Victory + Base HP** | +0-30.0 | Scaled by remaining base HP (0-30) |
+| **Victory + Soldiers Alive** | +15.0/soldier | Bonus per soldier that survived |
+| **Victory + NK Kills** | +20.0/NK | Bonus per Night King defeated |
+| **Victory - Poor NK Avoidance** | -50.0 | Large penalty if 6+ soldiers killed by NK |
+| **Defeat** | -30.0 | Base defeat penalty |
+| **Defeat + Partial Success** | +5-20.0 | Bonus based on NKs killed (1 NK: +5, 2 NKs: +10, 3+ NKs: +20) |
+
+**Reward Clipping:** All rewards are clipped to range [-500.0, +600.0]
+
+### PPO Agent Additional Rewards
+
+| Reward/Penalty | Value | Description |
+|---------------|-------|-------------|
+| **Base HP Ratio** | +0.5 × ratio | Continuous bonus scaled by base HP ratio (0-1) |
+| **NK Kill (incremental)** | +5.0 | Additional emphasis per new Night King killed (on top of env +50) |
+| **Wave Survival** | +0.3/step | Small continuous reward for surviving each step |
+| **Soldier Loss** | -0.3/soldier | Light penalty per soldier lost (environment already penalizes -5.0) |
+
+**Reward Scaling:** All rewards are divided by `reward_scale=20.0` (default) for training stability.
+
+### Key Learning Objectives
+
+The reward structure encourages agents to:
+
+1. **Avoid Night Kings**: Strong penalties (-15.0 to -30.0) for soldiers killed by NK sweeps teach agents to place soldiers away from Night Kings
+2. **Defend the Base**: Bonuses for soldiers near base when enemies threaten (+0.5 to +2.0) and penalties for leaving base undefended (-3.0 to -10.0)
+3. **Strategic Placement**: Rewards for soldier survival (+0.05 to +0.2) encourage safe, effective placement
+4. **Hero Deployment**: Large rewards for NK kills (+50.0 to +70.0 total) incentivize proper hero placement and deployment
+5. **Base Protection**: Heavy penalties for base damage (-20.0 to -30.0) prioritize base survival
+
 ## Training Tips
 
 After training, you should see the agents learn to:
