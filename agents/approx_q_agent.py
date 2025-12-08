@@ -152,8 +152,9 @@ class ApproximateQAgent:
         world_y = (grid_y / G) * SCREEN_H
 
         # Check screen bounds (vectorized)
-        valid_mask = (world_x >= MIN_X) & (world_x <= MAX_X) & \
-                     (world_y >= MIN_Y) & (world_y <= MAX_Y)
+        # Note: Use strict inequality < to match place_hero validation (not <=)
+        valid_mask = (world_x > MIN_X) & (world_x < MAX_X) & \
+                     (world_y > MIN_Y) & (world_y < MAX_Y)
 
         # Distance from base (vectorized)
         base_dists = np.sqrt((world_x - BASE_POS[0])**2 + (world_y - BASE_POS[1])**2)
