@@ -1150,7 +1150,7 @@ class TowerDefenseWarriorEnv(gym.Env):
             except Exception:
                 pass
             self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-            pygame.display.set_caption("Tower Defense - RL Agent")
+            pygame.display.set_caption("Tower Defense - Astar Agent")
             self.clock = pygame.time.Clock()
             self.font = pygame.font.SysFont("Verdana", 16)
             self.small_font = pygame.font.SysFont("Arial", 12)

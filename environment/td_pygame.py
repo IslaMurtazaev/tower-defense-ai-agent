@@ -6,7 +6,7 @@ Final Winterfell Defense — Single-file engine (Option A, final confirmed)
 Features implemented (as requested):
 - Soldiers attack nearest enemy (wight or Night King). They do 0 damage to Night Kings.
 - Soldiers kill ordinary wights instantly on contact (burn animation 0.1s).
-- Night Kings spawn in scheduled waves (5 total). Each NK walks in, becomes visible
+- Night Kings spawn in scheduled waves (4 total). Each NK walks in, becomes visible
   and engages when close enough. NK performs a sweeping AOE attack every 1.5s that
   instantly kills soldiers in the sweep radius.
 - Jon Snow and Daenerys are the ONLY units that can damage Night Kings.
@@ -94,7 +94,7 @@ DRAGON_BREATH_RANGE = 300.0
 # Base
 BASE_POS = (SCREEN_W//2, SCREEN_H//2)
 BASE_RADIUS = 56
-BASE_HP_MAX = 80
+BASE_HP_MAX = 100
 
 # Visuals & spawn
 SNOW_BASE = 110
@@ -114,8 +114,8 @@ SPAWN_ACCEL = 0.00035
 AUTO_DEPLOY_RANGE = 520.0
 AUTO_DEPLOY_COOLDOWN = 2.2
 
-# Night King scheduling (5 waves). We'll schedule these times in seconds.
-NK_SCHEDULE_TIMES = [45, 120, 210, 320, 480]
+# Night King scheduling (4 waves). We'll schedule these times in seconds.
+NK_SCHEDULE_TIMES = [35, 120, 240, 360]
 NK_RESPAWN_COOLDOWN = 16.0
 NEXT_NK_DELAY = NK_RESPAWN_COOLDOWN  # will be increased by +12 after each NK death.
 
@@ -598,7 +598,6 @@ class Soldier:
                     try: sound_engine.sounds["die"].play()
                     except: pass
                 return (False, None, None, None)
-                return (False, None, None, None)
         else:
             # target is a Night King: soldiers will still approach and attempt to hit (but deal 0)
             if d <= (SOLDIER_ATTACK_RANGE + NK_RADIUS):
@@ -610,7 +609,8 @@ class Soldier:
                     except: pass
                 # do not change NK hp
                 return (False, None, None, None)
-                return (False, None, None, None)
+        # Soldier is moving toward target but not in attack range yet
+        return (False, None, None, None)
     def draw(self, surf, font):
         pygame.draw.circle(surf, (22,22,26), (int(self.x), int(self.y)), SOLDIER_RADIUS+4)
         pygame.draw.circle(surf, self.color, (int(self.x), int(self.y)), SOLDIER_RADIUS)
@@ -727,7 +727,11 @@ class Jon:
                 self.cool = JON_COOLDOWN
                 if self.target.hp <= 0:
                     self.target.alive = False
-                    stats['nk_kills'] += 1
+                    # Track kills: wights vs Night Kings
+                    if getattr(self.target, "is_nk", False):
+                        stats['nk_kills'] += 1
+                    else:
+                        stats['wights_killed'] += 1
             else:
                 self.cool -= dt
             if self.swinging:
@@ -749,9 +753,10 @@ class Jon:
             surf.blit(halo, (cx-40, cy-40))
 
 class Daenerys:
-    def __init__(self, spawn_angle):
-        self.x = BASE_POS[0] + math.cos(spawn_angle)*(BASE_RADIUS+28)
-        self.y = BASE_POS[1] + math.sin(spawn_angle)*(BASE_RADIUS+28) - 100
+    def __init__(self, spawn_angle=None):
+        # Start hovering on the tower
+        self.x = BASE_POS[0]
+        self.y = BASE_POS[1]  # Hover directly on the tower
         self.target = None
         self.speed = DAEN_SPEED
         self.breathing = False
@@ -759,6 +764,7 @@ class Daenerys:
         self.active = False
         self.current_path = []
         self.path_target = None
+        self.hover_phase = random.uniform(0, 2*math.pi)  # For hover animation
 
     def _clear_path(self):
         self.current_path = []
@@ -822,18 +828,47 @@ class Daenerys:
         self.target = nk
         self.active = True
         self.returning = False
-    def step(self, dt, sound_engine, stats):
-        if not self.active:
+    def step(self, dt, sound_engine, stats, nks=None):
+        # Hover on the tower when no Night King is in range
+        hover_pos = (BASE_POS[0], BASE_POS[1])
+
+        # Check if there's a Night King in range (locked for battle)
+        nk_in_range = None
+        if nks:
+            for nk in nks:
+                if nk.alive and nk.locked_for_battle:
+                    nk_pos = nk.pos()
+                    distance_to_nk = math.hypot(nk_pos[0] - self.x, nk_pos[1] - self.y)
+                    # Engage if Night King is within engagement range
+                    if distance_to_nk <= NK_ENGAGE_RADIUS * 1.2:  # Slightly beyond engage radius
+                        nk_in_range = nk
+                        break
+
+        # If no Night King in range, hover on the tower
+        if not nk_in_range:
+            self.target = None
+            self.breathing = False
+            self.returning = False
+            # Hover animation - gentle circular motion around the tower center
+            self.hover_phase += dt * 0.8
+            hover_radius = 20.0
+            self.x = hover_pos[0] + math.cos(self.hover_phase) * hover_radius
+            self.y = hover_pos[1] + math.sin(self.hover_phase * 0.7) * hover_radius * 0.5
+            self.active = True  # Keep active so she's visible
             return
+
+        # Night King is in range - engage!
+        if not self.target or self.target != nk_in_range:
+            self.target = nk_in_range
+            self.active = True
+            self.returning = False
+
         if (not self.target) or (not self.target.alive):
-            self.returning = True
-            if dist((self.x, self.y), BASE_POS) > 12:
-                self._navigate_to(BASE_POS, dt)
-            else:
-                self._clear_path()
-                self.active = False
-                self.returning = False
+            # Return to hover position
+            self.target = None
+            self.breathing = False
             return
+
         tx, ty = self.target.pos(); dx = tx - self.x; dy = ty - self.y
         d = math.hypot(dx,dy)
         desired = DRAGON_BREATH_RANGE * 0.7
@@ -850,7 +885,11 @@ class Daenerys:
                     except: pass
             if self.target.hp <= 0:
                 self.target.alive = False
-                stats['nk_kills'] += 1
+                # Track kills: wights vs Night Kings
+                if getattr(self.target, "is_nk", False):
+                    stats['nk_kills'] += 1
+                else:
+                    stats['wights_killed'] += 1
     def draw(self, surf):
         # dragon silhouette + rider
         pygame.draw.polygon(surf, (190,140,120), [(int(self.x-48), int(self.y+8)), (int(self.x-20), int(self.y-54)), (int(self.x), int(self.y))])
@@ -953,11 +992,25 @@ def run():
 
     # spawn initial wights
     def spawn_wight():
-        key = random.randrange(NUM_PATHS)
+        # Exclude Night King's path if there's an active Night King
+        available_paths = list(range(NUM_PATHS))
+        if current_nk and current_nk.alive:
+            # Remove the Night King's path from available paths
+            if current_nk.path_key in available_paths:
+                available_paths.remove(current_nk.path_key)
+        # If all paths are blocked (shouldn't happen), fall back to all paths
+        if not available_paths:
+            available_paths = list(range(NUM_PATHS))
+        key = random.choice(available_paths)
         enemies.append(Enemy(key, delay=random.uniform(0.0, 0.25)))
 
     for _ in range(12):
         spawn_wight()
+
+    # Deploy Daenerys at game start - she will hover on tower until Night King appears
+    daenerys_initial = Daenerys(0.0)
+    daenerys_initial.active = True
+    heroes.append(daenerys_initial)
 
     # bran vision
     bran = BranVision()
@@ -1036,6 +1089,10 @@ def run():
                     for ns in nk_schedule:
                         ns['warned'] = False
                         ns['spawned'] = False
+                    # Re-deploy Daenerys at game start (hovering)
+                    daenerys_initial = Daenerys(0.0)
+                    daenerys_initial.active = True
+                    heroes.append(daenerys_initial)
                     bran = BranVision()
                     paused = False
                     game_over = False
@@ -1167,15 +1224,28 @@ def run():
                     if e.locked_for_battle and e.alive:
                         hero_present = any((isinstance(h, Jon) and h.active and h.target is e) or (isinstance(h, Daenerys) and h.active and h.target is e) for h in heroes)
                         if not hero_present:
+                            # Check if heroes already exist (to avoid duplicates)
+                            jon_exists = any(isinstance(h, Jon) for h in heroes)
+                            daenerys_exists = any(isinstance(h, Daenerys) for h in heroes)
+
                             # decide hero by index parity (matching earlier behavior)
                             if e.index % 2 == 0:
-                                new_jon = Jon(math.atan2(e.pos()[1] - BASE_POS[1], e.pos()[0] - BASE_POS[0]))
-                                new_jon.deploy_for(e)
-                                heroes.append(new_jon)
+                                if not jon_exists:
+                                    new_jon = Jon(math.atan2(e.pos()[1] - BASE_POS[1], e.pos()[0] - BASE_POS[0]))
+                                    new_jon.deploy_for(e)
+                                    heroes.append(new_jon)
+                                else:
+                                    # Reactivate existing Jon
+                                    for h in heroes:
+                                        if isinstance(h, Jon):
+                                            h.deploy_for(e)
+                                            break
                             else:
-                                new_daen = Daenerys(math.atan2(e.pos()[1] - BASE_POS[1], e.pos()[0] - BASE_POS[0]))
-                                new_daen.deploy_for(e)
-                                heroes.append(new_daen)
+                                if not daenerys_exists:
+                                    new_daen = Daenerys(0.0)
+                                    new_daen.deploy_for(e)
+                                    heroes.append(new_daen)
+                                # Daenerys will engage automatically in her step method when NK is in range
                 else:
                     e.step(dt)
                 # ordinary enemy death/reach handling
@@ -1203,17 +1273,51 @@ def run():
                     try: burns.remove(b)
                     except: pass
 
-            # hero update
+            # hero update - prioritize Night Kings, but also attack wights when no NKs present
             for h in list(heroes):
+                # If hero is inactive (returned to base) or has no target, find a new target
+                if not h.active or (h.target is None or not h.target.alive):
+                    # Priority 1: Find nearest active Night King (if any)
+                    best_nk = None
+                    best_nk_dist = float('inf')
+                    for nk in nks:
+                        if nk.alive and nk.locked_for_battle:
+                            nk_pos = nk.pos()
+                            hero_pos = (h.x, h.y)
+                            distance = math.hypot(nk_pos[0] - hero_pos[0], nk_pos[1] - hero_pos[1])
+                            if distance < best_nk_dist:
+                                best_nk_dist = distance
+                                best_nk = nk
+
+                    # Priority 2: If no Night King, find nearest wight
+                    best_wight = None
+                    best_wight_dist = float('inf')
+                    if not best_nk:
+                        for enemy in enemies:
+                            if enemy.alive and enemy.spawn_delay <= 0:
+                                enemy_pos = enemy.pos()
+                                hero_pos = (h.x, h.y)
+                                distance = math.hypot(enemy_pos[0] - hero_pos[0], enemy_pos[1] - hero_pos[1])
+                                if distance < best_wight_dist:
+                                    best_wight_dist = distance
+                                    best_wight = enemy
+
+                    # Assign target (NK takes priority)
+                    if best_nk:
+                        # Reactivate hero and deploy for Night King
+                        h.deploy_for(best_nk)
+                    elif best_wight:
+                        # Assign wight as target and activate hero
+                        h.target = best_wight
+                        h.active = True
+                        h.returning = False
+
                 if isinstance(h, Jon):
                     h.step(dt, stats, sound_engine)
                 elif isinstance(h, Daenerys):
-                    h.step(dt, sound_engine, stats)
-                # remove inactive heroes that returned
-                if hasattr(h, 'active') and not h.active:
-                    try:
-                        heroes.remove(h)
-                    except: pass
+                    h.step(dt, sound_engine, stats, nks)  # Pass nks so she can check for Night Kings in range
+                # DO NOT remove inactive heroes - they should remain available for next Night King
+                # Heroes will be reactivated when a new Night King appears via deploy_for() above
 
             # dead soldier ragdolls update
             for ds in list(dead_soldiers):

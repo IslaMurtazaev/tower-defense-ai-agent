@@ -147,6 +147,8 @@ The PPO agent uses:
 - Reward normalization and gradient clipping
 - 24-dimensional feature space
 
+**Demo Video**: [PPO Agent Demo](https://youtu.be/jS7xaPr4aY4)
+
 ### A* Baseline
 
 Compare against an A* pathfinding baseline:
@@ -156,6 +158,8 @@ python evaluate_astar_agent.py --episodes 50
 ```
 
 The A* agent uses pathfinding heuristics to identify optimal placement positions based on enemy movement patterns.
+
+**Demo Video**: [A* Baseline Agent Demo](https://youtu.be/LqK5tIdsUcg)
 
 ### Evaluating Agents
 
@@ -214,13 +218,13 @@ The HUD displays:
 
 ### Model-Based Planning
 
-- **A*** — calculates optimal enemy paths, identifying critical choke points (like the narrow breach in the castle walls). Used as a baseline for comparison.
+- **A*** — calculates optimal enemy paths, identifying critical choke points (like the narrow breach in the castle walls). Used as a baseline for comparison. [Watch the demo](https://youtu.be/LqK5tIdsUcg)
 
 ### Model-Free Reinforcement Learning
 
 - **Approximate Q-Learning** — feature-based value function approximation with linear function approximation. Learns to avoid Night Kings and defend the base through trial and error.
 
-- **PPO (Proximal Policy Optimization)** — policy gradient method that learns a stochastic policy. More sample-efficient than Q-Learning but requires more computation.
+- **PPO (Proximal Policy Optimization)** — policy gradient method that learns a stochastic policy. More sample-efficient than Q-Learning but requires more computation. [Watch the demo](https://youtu.be/jS7xaPr4aY4)
 
 ### Hybrid Approaches
 

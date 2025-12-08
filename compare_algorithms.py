@@ -12,6 +12,7 @@ import json
 from environment.td_warrior_gym_env import TowerDefenseWarriorEnv
 from agents.astar_baseline_agent import AStarBaselineAgent
 from agents.approx_q_agent import ApproximateQAgent
+from agents.ppo_agent import PPOAgent
 
 
 def evaluate_agent(agent, env, episodes: int, max_steps: int, seed: int = 0) -> Dict[str, Any]:
@@ -90,10 +91,16 @@ def compare_algorithms(args):
     else:
         print("⚠️  Q-Learning model not found, skipping...")
 
-    # PPO (if implemented)
-    # TODO: Add PPO agent when implemented
-    # if args.ppo_model_path and Path(args.ppo_model_path).exists():
-    #     algorithms['PPO'] = ...
+    # PPO (if model exists)
+    if args.ppo_model_path and Path(args.ppo_model_path).exists():
+        print(f"Loading PPO agent from {args.ppo_model_path}...")
+        algorithms['PPO'] = PPOAgent.load(
+            args.ppo_model_path,
+            observation_space=env.observation_space,
+            action_space=env.action_space
+        )
+    elif args.ppo_model_path:
+        print("⚠️  PPO model not found, skipping...")
 
     # Evaluate each algorithm
     results = {}
@@ -156,8 +163,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--q-model-path", type=str, default="trained_models/q_learning/q_agent_final.pkl",
                        help="Path to Q-Learning model")
-    parser.add_argument("--ppo-model-path", type=str, default=None,
-                       help="Path to PPO model (if implemented)")
+    parser.add_argument("--ppo-model-path", type=str, default="trained_models/ppo/ppo_agent_final.pth",
+                       help="Path to PPO model")
     parser.add_argument("--output", type=str, default="comparison_results.json",
                        help="Output file for results")
 
