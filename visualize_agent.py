@@ -4,23 +4,37 @@ import math
 import time
 from pathlib import Path
 
+import numpy as np
 import pygame
 import torch
 
 from environment import td_pyastar as game
 from environment.td_warrior_gym_env import TowerDefenseWarriorEnv
 from agents.approx_q_agent import ApproximateQAgent
-from agents.ppo_agent import PPOAgent
+# Only import PPOAgent if needed (for .pth files)
+try:
+    from agents.ppo_agent import PPOAgent
+except ImportError:
+    PPOAgent = None
 
 
 def visualize(args):
     """Run the agent and visualize its gameplay."""
-    # Create environment with human rendering
-    env = TowerDefenseWarriorEnv(render_mode="human", fast_mode=False)
+    # Load agent based on file extension to determine agent type
+    model_path = Path(args.model_path)
+
+    if model_path.suffix == '.pkl':
+        agent_type = "Q-Learning"
+    elif model_path.suffix == '.pth':
+        agent_type = "PPO"
+    else:
+        agent_type = "RL"  # Default fallback
+
+    # Create environment with human rendering and agent type for window title
+    env = TowerDefenseWarriorEnv(render_mode="human", fast_mode=False, agent_type=agent_type)
 
     # Load agent based on file extension
     print(f"Loading agent from {args.model_path}")
-    model_path = Path(args.model_path)
 
     if model_path.suffix == '.pkl':
         # Q-Learning agent
@@ -32,15 +46,17 @@ def visualize(args):
         # Set epsilon to 0 for evaluation (no exploration)
         agent.epsilon_start = 0.0
         agent.epsilon_end = 0.0
-        agent_type = "Q-Learning"
+        # agent_type already set above
     elif model_path.suffix == '.pth':
         # PPO agent (separate policy and value networks)
+        if PPOAgent is None:
+            raise ImportError("PyTorch is required for PPO agents. Install with: pip install torch")
         agent = PPOAgent.load(
             str(model_path),
             observation_space=env.observation_space,
             action_space=env.action_space
         )
-        agent_type = "PPO"
+        # agent_type already set above
     else:
         raise ValueError(
             f"Unknown model file extension: {model_path.suffix}. "
@@ -100,8 +116,14 @@ def visualize(args):
                 clock.tick(60)
                 continue
 
-            # Agent selects action
-            action = agent.select_action(obs)
+            # Agent selects action (only during placement phase to avoid expensive Q-value computation during combat)
+            # During combat, the game auto-runs and actions are ignored, so we skip the expensive select_action() call
+            if info.get('phase', 'placement') == 'placement':
+                action = agent.select_action(obs)
+            else:
+                # Combat phase: use a dummy action (won't be used, but needed for step())
+                # This avoids calling select_action() which computes Q-values and features every frame
+                action = np.array([0, 0, 0], dtype=np.int64)
 
             # Track units before step
             soldiers_before = len(env.game_state.soldiers)

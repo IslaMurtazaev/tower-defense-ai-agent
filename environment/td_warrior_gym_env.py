@@ -441,12 +441,13 @@ class TowerDefenseWarriorEnv(gym.Env):
     # Grid size for observation
     GRID_SIZE = 32
 
-    def __init__(self, render_mode: Optional[str] = None, fast_mode: bool = True, fast_multiplier: int = 5):
+    def __init__(self, render_mode: Optional[str] = None, fast_mode: bool = True, fast_multiplier: int = 5, agent_type: Optional[str] = None):
         super().__init__()
 
         self.render_mode = render_mode
         self.fast_mode = fast_mode
         self.fast_multiplier = fast_multiplier
+        self.agent_type = agent_type  # For window title customization
         self.sound_engine_initialized = False
 
         # Create headless game simulation
@@ -1150,7 +1151,12 @@ class TowerDefenseWarriorEnv(gym.Env):
             except Exception:
                 pass
             self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-            pygame.display.set_caption("Tower Defense - Astar Agent")
+            # Set window title based on agent type
+            if self.agent_type:
+                caption = f"Tower Defense - {self.agent_type} Agent"
+            else:
+                caption = "Tower Defense - RL Agent"
+            pygame.display.set_caption(caption)
             self.clock = pygame.time.Clock()
             self.font = pygame.font.SysFont("Verdana", 16)
             self.small_font = pygame.font.SysFont("Arial", 12)

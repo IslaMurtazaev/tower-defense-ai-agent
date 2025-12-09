@@ -36,6 +36,15 @@ This environment serves as the foundation for training AI agents that must:
 
 We've implemented multiple reinforcement learning approaches to tackle this challenge, including Approximate Q-Learning and Proximal Policy Optimization (PPO), along with an A* baseline for comparison.
 
+## Demo Videos
+- Full Playlist: https://youtube.com/playlist?list=PLIXwDwuRCnyhHpq8Azd2WAr0Qs9UGXnrj&si=lXrvnqG_B9oN2LWN
+
+## Latest Results (Dec 2025)
+- **PPO (best current `agent_type`)**: ~11.5% victory rate (115/1000), mean reward ≈ -1794. Trained 1000 episodes with fast mode (×20), learning rate 1e-3, gamma 0.99, clip ε 0.2, reward-scale 20.0, GAE λ 0.95, entropy coef 0.02.
+- **Q-Learning**: ~10.2% victory rate (102/1000), mean reward ≈ -4489. Trained 1000 episodes with fast mode (×50), max-steps 1500, default alpha 0.001, gamma 0.92, epsilon decay to 0.05.
+
+Conclusion: PPO is the top-performing agent among the implemented algorithms based on the latest comparison run.
+
 ## Game Features
 
 ### Core Mechanics
@@ -132,6 +141,12 @@ The agent learns to place soldiers strategically, avoiding Night Kings while def
 - NK avoidance and base defense features
 - Adaptive learning rate and epsilon decay
 - Experience replay and gradient clipping for stability
+- **Demo Video**: [Q-Learning Agent Demo](https://youtu.be/6aD3MP2O0_E)
+
+#### TensorBoard Snapshot (Q-Learning)
+- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length): `qchart.png`
+- Quick read: rewards remain noisy but slowly lift on MA50; victories are sparse but present; base HP at end is usually low with occasional spikes; episode lengths sit ~350–500 steps.
+- To regenerate: `tensorboard --logdir=runs/ --port 6006` and capture the Scalars tab for the run `q_learning/q_learning_20251208_003948` (or your current run).
 
 ### PPO Agent
 
@@ -148,6 +163,11 @@ The PPO agent uses:
 - 24-dimensional feature space
 
 **Demo Video**: [PPO Agent Demo](https://youtu.be/jS7xaPr4aY4)
+
+#### TensorBoard Snapshot (PPO)
+- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length): `ppochart.png`
+- Quick read: rewards trend higher and smoother than Q-Learning; victory ticks are more frequent; base HP end values are modest but steadier; episode lengths cluster around similar ranges, reflecting more stable policy rollout.
+- To regenerate: `tensorboard --logdir=runs/ --port 6006` and capture the Scalars tab for your PPO run (e.g., `ppo/ppo_...`).
 
 ### A* Baseline
 

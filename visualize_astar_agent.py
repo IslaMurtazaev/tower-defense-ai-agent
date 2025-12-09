@@ -12,8 +12,8 @@ from agents.astar_baseline_agent import AStarBaselineAgent
 
 def visualize(args):
     """Run the A* baseline agent and visualize its gameplay."""
-    # Create environment with human rendering
-    env = TowerDefenseWarriorEnv(render_mode="human", fast_mode=False)
+    # Create environment with human rendering and agent type for window title
+    env = TowerDefenseWarriorEnv(render_mode="human", fast_mode=False, agent_type="A* Baseline")
 
     # Create agent
     print("Initializing A* baseline agent...")

@@ -6,7 +6,7 @@ This script evaluates all algorithms and generates a comparison report.
 import argparse
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, Any
 import json
 
 from environment.td_warrior_gym_env import TowerDefenseWarriorEnv
@@ -27,6 +27,11 @@ def evaluate_agent(agent, env, episodes: int, max_steps: int, seed: int = 0) -> 
 
     for ep in range(episodes):
         obs, info = env.reset(seed=seed + ep)
+
+        # Reset PPO agent buffers before each episode (critical for proper evaluation)
+        if hasattr(agent, 'reset_buffers'):
+            agent.reset_buffers()
+
         done = False
         ep_reward = 0.0
         ep_length = 0

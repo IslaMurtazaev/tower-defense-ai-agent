@@ -63,6 +63,37 @@ python train_q_learning.py \
     --save-interval 200
 ```
 
+### Commands Used for Current Checkpoints (Dec 2025)
+Reproduce the models saved in `trained_models/*/` that were used for the latest comparison runs (1000 episodes each):
+
+```bash
+# Q-Learning (Approximate Q)
+python train_q_learning.py \
+    --episodes 1000 \
+    --max-steps 1500 \
+    --save-interval 200 \
+    --save-model q_agent_final.pkl \
+    --log-interval 10 \
+    --fast-mode \
+    --fast-multiplier 50 \
+    --seed 42
+
+# PPO
+python train_ppo.py \
+    --episodes 1000 \
+    --max-steps 2000 \
+    --save-interval 200 \
+    --log-interval 5 \
+    --fast-mode \
+    --fast-multiplier 20 \
+    --learning-rate 1e-3 \
+    --gamma 0.99 \
+    --clip-epsilon 0.2 \
+    --reward-scale 20.0 \
+    --gae-lambda 0.95 \
+    --entropy-coef 0.02
+```
+
 ---
 
 ## PPO Training
@@ -283,16 +314,6 @@ python visualize_agent.py \
 
 ## Expected Results
 
-After training with these commands, you should see:
-
-**Q-Learning (3000 episodes):**
-- Victory rate: 20-40%
-- Soldiers killed by NK: 0-3 per episode
-- Base HP: 10-50 at episode end
-- Training time: 2-4 hours
-
-**PPO (500 episodes):**
-- Victory rate: 15-35%
-- Soldiers killed by NK: 1-4 per episode
-- Base HP: 5-40 at episode end
-- Training time: 1-2 hours
+**Observed in latest 1000-episode runs (Dec 2025 checkpoints):**
+- Q-Learning: ~10.2% victory rate (102/1000), mean reward ≈ -4489
+- PPO: ~11.5% victory rate (115/1000), mean reward ≈ -1794
