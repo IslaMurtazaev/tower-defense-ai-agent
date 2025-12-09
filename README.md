@@ -1,4 +1,4 @@
-# Optimized Defender Deployment in a Tower Defence Game
+# Tower Defense AI Agent
 
 *"What is dead may never die... but with good AI, it dies much faster."*
 
@@ -130,13 +130,11 @@ The game runs with optional sound support. If a `sounds/` folder is present in t
 
 ### Q-Learning Agent
 
-Train an Approximate Q-Learning agent:
 
-```bash
-python train_q_learning.py --episodes 3000 --alpha 0.005 --eps-decay 50000 --eps-end 0.05
 ```
+See `TRAINING_COMMANDS.md` for full options, variants, and troubleshooting.
 
-The agent learns to place soldiers strategically, avoiding Night Kings while defending the base. Key features include:
+Highlights:
 - Feature-based value approximation with 28 handcrafted features
 - NK avoidance and base defense features
 - Adaptive learning rate and epsilon decay
@@ -144,19 +142,19 @@ The agent learns to place soldiers strategically, avoiding Night Kings while def
 - **Demo Video**: [Q-Learning Agent Demo](https://youtu.be/6aD3MP2O0_E)
 
 #### TensorBoard Snapshot (Q-Learning)
-- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length): `qchart.png`
+- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length):
+
+![Q-Learning TensorBoard Snapshot](qchart.png)
+
 - Quick read: rewards remain noisy but slowly lift on MA50; victories are sparse but present; base HP at end is usually low with occasional spikes; episode lengths sit ~350–500 steps.
 - To regenerate: `tensorboard --logdir=runs/ --port 6006` and capture the Scalars tab for the run `q_learning/q_learning_20251208_003948` (or your current run).
 
 ### PPO Agent
 
-Train a Proximal Policy Optimization agent:
 
-```bash
-python train_ppo.py --episodes 500 --learning-rate 1e-3 --save-interval 100
-```
+See `TRAINING_COMMANDS.md` for full options, variants, and troubleshooting.
 
-The PPO agent uses:
+Highlights:
 - Policy and value networks with layer normalization
 - GAE (Generalized Advantage Estimation) for stable learning
 - Reward normalization and gradient clipping
@@ -165,7 +163,10 @@ The PPO agent uses:
 **Demo Video**: [PPO Agent Demo](https://youtu.be/jS7xaPr4aY4)
 
 #### TensorBoard Snapshot (PPO)
-- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length): `ppochart.png`
+- Combined (6 charts: Reward, Reward_MA10, Reward_MA50, Victory, Base_HP_End, Length):
+
+![PPO TensorBoard Snapshot](ppochart.png)
+
 - Quick read: rewards trend higher and smoother than Q-Learning; victory ticks are more frequent; base HP end values are modest but steadier; episode lengths cluster around similar ranges, reflecting more stable policy rollout.
 - To regenerate: `tensorboard --logdir=runs/ --port 6006` and capture the Scalars tab for your PPO run (e.g., `ppo/ppo_...`).
 
@@ -250,30 +251,6 @@ The HUD displays:
 
 - **A* Baseline Agent** — uses A* pathfinding to identify optimal placement positions, serving as a non-learning baseline for comparison.
 
-## Project Structure
-
-```
-tower-defense-ai-agent/
-├── environment/
-│   ├── td_pyastar.py          # Main game engine (headless)
-│   ├── td_pygame.py           # Pygame visualization
-│   ├── td_warrior_gym_env.py  # Gymnasium RL environment wrapper
-│   └── astar_controller.py    # A* pathfinding controller
-├── agents/
-│   ├── approx_q_agent.py      # Q-Learning agent
-│   ├── ppo_agent.py           # PPO agent
-│   └── astar_baseline_agent.py # A* baseline agent
-├── train_q_learning.py        # Q-Learning training script
-├── train_ppo.py               # PPO training script
-├── evaluate_q_agent.py        # Q-Learning evaluation
-├── evaluate_ppo_agent.py      # PPO evaluation
-├── evaluate_astar_agent.py    # A* baseline evaluation
-├── visualize_agent.py         # Visualize trained agents
-├── find_and_visualize_victories.py # Find and visualize victories
-├── compare_algorithms.py       # Compare all agents
-├── requirements.txt           # Python dependencies
-└── README.md                  # This file
-```
 
 ## Technical Details
 
