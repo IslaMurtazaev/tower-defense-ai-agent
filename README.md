@@ -1,4 +1,4 @@
-# Tower Defense AI Agent
+# Game Of Thrones Simulated Winterfell Defense AI Agent
 
 *"What is dead may never die... but with good AI, it dies much faster."*
 
