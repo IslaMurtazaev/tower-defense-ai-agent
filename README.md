@@ -249,7 +249,7 @@ The HUD displays:
 
 ### Model-Free Reinforcement Learning
 
-- **Approximate Q-Learning** — feature-based value function approximation with linear function approximation. Learns to avoid Night Kings and defend the base through trial and error.
+- **Approximate Q-Learning** — feature-based value function approximation with linear function approximation. Learns to avoid Night Kings and defend the base through trial and error. [Watch the demo](https://youtu.be/6aD3MP2O0_E)
 
 - **PPO (Proximal Policy Optimization)** — policy gradient method that learns a stochastic policy. More sample-efficient than Q-Learning but requires more computation. [Watch the demo](https://youtu.be/jS7xaPr4aY4)
 
