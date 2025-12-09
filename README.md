@@ -131,6 +131,9 @@ The game runs with optional sound support. If a `sounds/` folder is present in t
 ### Q-Learning Agent
 
 
+Quick start:
+```bash
+python train_q_learning.py --episodes 3000 --alpha 0.005 --eps-decay 50000 --eps-end 0.05
 ```
 See `TRAINING_COMMANDS.md` for full options, variants, and troubleshooting.
 
@@ -151,7 +154,10 @@ Highlights:
 
 ### PPO Agent
 
-
+Quick start:
+```bash
+python train_ppo.py --episodes 500 --learning-rate 1e-3 --save-interval 100
+```
 See `TRAINING_COMMANDS.md` for full options, variants, and troubleshooting.
 
 Highlights:
